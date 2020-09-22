@@ -86,6 +86,7 @@ public:
                                         int, parity);
     };
     typedef Correlator<Metadata> Result;
+    typedef Correlator<Metadata, SpinMatrix> ResultMat;
 public:
     // constructor
     TBaryon(const std::string name);
@@ -200,6 +201,7 @@ template <typename FImpl>
 void TBaryon<FImpl>::setup(void)
 {
     envTmpLat(LatticeComplex, "c");
+    envTmpLat(SpinMatrixField, "cMat");
 }
 
 // execution ///////////////////////////////////////////////////////////////////
@@ -259,8 +261,11 @@ void TBaryon<FImpl>::execute(void)
         LOG(Message) << "    with (Gamma^A,Gamma^B)_left = ( " << gammaList[iG].first.first << " , " << gammaList[iG].first.second << "') and (Gamma^A,Gamma^B)_right = ( " << gammaList[iG].second.first << " , " << gammaList[iG].second.second << ")" << std::endl;
     
     envGetTmp(LatticeComplex, c);
+    envGetTmp(SpinMatrixField, cMat);
     int nt = env().getDim(Tp);
 
+    std::vector<ResultMat> resultMat;
+    ResultMat              rMat;
     std::vector<Result> result;
     Result              r;
     r.info.parity  = par().parity;
@@ -280,6 +285,7 @@ void TBaryon<FImpl>::execute(void)
         for (unsigned int i = 0; i < gammaList.size(); ++i)
         {
             std::vector<TComplex> buf;
+            std::vector<SpinMatrix> bufMat;
 
             r.info.gammaA_left = gammaList[i].first.first;
             r.info.gammaB_left = gammaList[i].first.second;
@@ -294,16 +300,28 @@ void TBaryon<FImpl>::execute(void)
             std::string ns = vm().getModuleNamespace(env().getObjectModule(par().sinkq1));
             if (ns == "MSource")
             {
-                c=Zero();
+                /*c=Zero();
                 BaryonUtils<FIMPL>::ContractBaryons(q1,q2,q3,
                                                     gAl,gBl,gAr,gBr,
                                                     wick_contractions,
                                                     par().parity,
                                                     c);
-
                 PropagatorField &sink = envGet(PropagatorField, par().sinkq1);
                 auto test = closure(trace(sink*c));     
                 sliceSum(test, buf, Tp); 
+		*/				    
+                cMat=Zero();
+                BaryonUtils<FIMPL>::ContractBaryons_matrix(q1,q2,q3,
+                                                    gAl,gBl,gAr,gBr,
+                                                    wick_contractions,
+                                                    cMat);
+                sliceSum(cMat,bufMat,Tp);
+                r.corr.clear();
+                for (unsigned int t = 0; t < buf.size(); ++t)
+                {
+                    rMat.corr.push_back(bufMat[t]);
+                 }
+
             }
             else if (ns == "MSink")
             {
