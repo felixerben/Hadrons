@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<grid>
+    <runPar>
+        <runId>testInput</runId>
+    </runPar>
+    <configPar>
+        <fileStem></fileStem>
+        <begin>100</begin>
+        <end>101</end>
+        <step>20</step>
+    </configPar>
+    <outputPar>
+        <resultDir>testOutput</resultDir>
+        <xmlName>inputTest.xml</xmlName>
+    </outputPar>
+    <dwfPar>
+        <mass>0.1</mass>
+        <Ls>10</Ls>
+        <M5>1.8</M5>
+        <residual>1e-04</residual>
+    </dwfPar>
+</grid>
