@@ -25,7 +25,8 @@
 /*  END LEGAL */
 
 /**************************************************************************
- * This test showcases how to write an input file for a Hadrons C++ program
+ * This test showcases how to use the Hadrons xml reader to write
+ * an input file for a Hadrons C++ program
 **************************************************************************/
 #include <typeinfo>
 #include <Hadrons/Application.hpp>
