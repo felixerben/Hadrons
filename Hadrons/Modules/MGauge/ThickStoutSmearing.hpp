@@ -102,6 +102,7 @@ void TThickStoutSmearing<GImpl>::setup(void)
     envCreateLat(GaugeField, getName());
     envTmpLat(GaugeField, "buf");
     envTmpLat(GaugeField, "Utmp");
+    envTmpLat(GaugeField, "UsmrTmp");
     envTmp(Lattice<iScalar<vInteger>>, "tlat",1, envGetGrid(LatticeComplex));
 }
 
@@ -113,38 +114,40 @@ void TThickStoutSmearing<GImpl>::execute(void)
                  << " step" << ((par().steps > 1) ? "s" : "") 
                  << " of stout smearing and rho= " << par().rho << std::endl;
 
-    int oDim = -1;
-    if(!par().orthogDim.empty())
-    {
-        LOG(Message) << "Only smearing orthogonally to dimension " << par().orthogDim << std::endl;
-        oDim=std::stoi(par().orthogDim);
-    }
-    Smear_Stout<GImpl> smearer(par().rho, oDim);
+    Smear_Stout<GImpl> smearer(par().rho, -1);
     auto               &U    = envGet(GaugeField, par().gauge);
     auto               &Usmr = envGet(GaugeField, getName());
 
+    Usmr = U;
+    LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(U)
+                 << std::endl;
     const int  Nt{env().getDim(Tdir)};
     envGetTmp(GaugeField, Utmp);
+    envGetTmp(GaugeField, UsmrTmp);
+    //should be input
     int t_thick=1;
     envGetTmp(Lattice<iScalar<vInteger>>, tlat);
     LatticeCoordinate(tlat, Tp);
     for (int t = 0; t < Nt; t++)
     {
-        Utmp=where((t-t_thick <= tlat && tlat <= t+t_thick),U,0.*U);
-    }
-    envGetTmp(GaugeField, buf);
-    buf = U;
-    LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(U)
+        //this only works if t is sufficiently far away from the boundary
+        //Utmp=where((t-t_thick <= tlat && tlat <= t+t_thick),U,0.*U);
+        Utmp=where((t==tlat),U,0.*U);
+        LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(Utmp)
                  << std::endl;
-    // This is only here to return the original field in case steps=0. Not sure whether it's needed.
-    Usmr = U;
-    for (unsigned int n = 0; n < par().steps; ++n)
-    {
-        smearer.smear(Usmr, buf);
-        buf = Usmr;
-        LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(Usmr)
-                     << std::endl;
+        envGetTmp(GaugeField, buf);
+        buf = Utmp;
+        // smear the thick timeslice of the field using standard stout smearing
+        for (unsigned int n = 0; n < par().steps; ++n)
+        {
+            smearer.smear(UsmrTmp, buf);
+            buf = UsmrTmp;
+        }
+        // store the smeared field in the output on timeslice t
+        Usmr=where((t == tlat),UsmrTmp,Usmr);
     }
+    LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(Usmr)
+                 << std::endl;
 }
 
 END_MODULE_NAMESPACE
