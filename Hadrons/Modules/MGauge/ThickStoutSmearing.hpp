@@ -133,6 +133,7 @@ void TThickStoutSmearing<GImpl>::execute(void)
         //this only works if t is sufficiently far away from the boundary
         //Utmp=where((t-t_thick <= tlat && tlat <= t+t_thick),U,0.*U);
         Utmp=where((t==tlat),U,0.*U);
+        //Utmp=where((t==tlat),U,U);
         LOG(Message) << "plaquette= " << WilsonLoops<GImpl>::avgPlaquette(Utmp)
                  << std::endl;
         envGetTmp(GaugeField, buf);
@@ -142,6 +143,8 @@ void TThickStoutSmearing<GImpl>::execute(void)
         {
             smearer.smear(UsmrTmp, buf);
             buf = UsmrTmp;
+    LOG(Message) << "plaquette= " << n << " " << WilsonLoops<GImpl>::avgPlaquette(UsmrTmp)
+                 << std::endl;
         }
         // store the smeared field in the output on timeslice t
         Usmr=where((t == tlat),UsmrTmp,Usmr);
