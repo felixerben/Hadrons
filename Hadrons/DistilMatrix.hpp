@@ -76,6 +76,9 @@ using DilutionMap  = std::array<std::vector<std::vector<unsigned int>>,3>;
 enum Side {left = 0, right = 1};
 const std::vector<Side> sides =  {Side::left,Side::right};  //for easy looping over sides
 
+//descriptor of the operator type in the meson field
+GRID_SERIALIZABLE_ENUM(opType, undef, singleSite, 0, disp1, 1, disp2, 2, disp2L, 3);
+
 // metadata serialiser class
 template <typename FImpl>
 class DistilMesonFieldMetadata: Serializable
@@ -85,7 +88,7 @@ public:
                                     unsigned int,                               Nt,
                                     unsigned int,                               Nvec,
                                     std::vector<RealF>,                         Momentum,
-                                    Gamma::Algebra,                             Operator,               // potentially more general operators in the future
+                                    std::string,                                Operator,               // the future is now
                                     std::vector<unsigned int>,                  NoisePair,
                                     std::string,                                MesonFieldType,
                                     std::string,                                NoiseHashLeft,
@@ -390,13 +393,15 @@ private:
                                       Side                              s,
                                       unsigned int                      dt,
                                       unsigned int                      iibatch,
-                                      std::map<Side, PerambTensor&>     peramb={});
+                                      std::map<Side, PerambTensor&>     peramb={},
+                                      opType                            displacement=opType::singleSite);
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
                                       LapPack&                          epack,
                                       Side                              s,
                                       std::vector<unsigned int>         dt_list,
-                                      std::map<Side, PerambTensor&>     peramb);
+                                      std::map<Side, PerambTensor&>     peramb,
+                                      opType                            displacement);
     std::vector<unsigned int> fetchDvBatchIdxs(unsigned int               ibatch,
                                                std::vector<unsigned int>  time_dil_sources,
                                                unsigned int                    shift=0);
@@ -433,7 +438,8 @@ public:
                        TimerArray*                                    tarray,
                        Side                                           relative_side,
                        std::vector<unsigned int>                      delta_t_list,
-                       std::map<Side, PerambTensor&>                  peramb={});
+                       std::map<Side, PerambTensor&>                  peramb={});//,
+              //         opType                                         displacement);
     void executeFixed(const FilenameFn                               &filenameDmfFn,
                  const MetadataFn                               &metadataDmfFn,
                  std::vector<Gamma::Algebra>                    gamma,
@@ -570,7 +576,8 @@ void DmfComputation<FImpl,T,Tio>
                                Side                                 s,
                                unsigned int                         dt,
                                unsigned int                         iibatch,
-                               std::map<Side, PerambTensor&>        peramb)
+                               std::map<Side, PerambTensor&>        peramb,
+                               opType                               displacement)
 {
     unsigned int D_offset = distilNoise_.at(s).dilutionIndex(dt,0,0);    // t is the slowest index
     unsigned int iD_offset = iibatch*dilSizeLS_.at(s);
@@ -603,11 +610,12 @@ void DmfComputation<FImpl,T,Tio>
                                LapPack&                         epack,
                                Side                             s,
                                std::vector<unsigned int>        dt_list,
-                               std::map<Side, PerambTensor&>    peramb)
+                               std::map<Side, PerambTensor&>    peramb,
+                               opType                           displacement)
 {
     for(unsigned int idt=0 ; idt<dt_list.size() ; idt++)
     {
-        makeDvLapSpinBlock(dv,n_idx,epack,s,dt_list[idt],idt,peramb);
+        makeDvLapSpinBlock(dv,n_idx,epack,s,dt_list[idt],idt,peramb,displacement);
     }
 }
 
@@ -757,8 +765,10 @@ void DmfComputation<FImpl,T,Tio>
                 TimerArray*                                   tarray,
                 Side                                          relative_side,
                 std::vector<unsigned int>                     delta_t_list,
-                std::map<Side, PerambTensor&>                 peramb)
+                std::map<Side, PerambTensor&>                 peramb)//,
+    //            opType                                        displacement)
 {
+    opType displacement = opType::disp2; //TODO: change later
     const unsigned int vol = g_->_gsites;
     Side anchored_side = (relative_side==Side::right ? Side::left : Side::right);
 
@@ -774,7 +784,7 @@ void DmfComputation<FImpl,T,Tio>
             START_TIMER("distil vectors");
             std::vector<unsigned int> batch_dtAnchored;
             batch_dtAnchored = fetchDvBatchIdxs(ibatchAnchored,time_dil_source.at(anchored_side));
-            makeDvLapSpinBatch(dv, n_idx, epack, anchored_side, batch_dtAnchored, peramb);
+            makeDvLapSpinBatch(dv, n_idx, epack, anchored_side, batch_dtAnchored, peramb, displacement);
             STOP_TIMER("distil vectors");
             for (unsigned int idtAnchored=0 ; idtAnchored<batch_dtAnchored.size() ; idtAnchored++)
             {
@@ -939,6 +949,7 @@ void DmfComputation<FImpl,T,Tio>
           const unsigned int                            diag_shift,
           std::map<Side, PerambTensor&>                 peramb)
 {
+    opType displacement = opType::disp2; //TODO: change later
     const unsigned int vol = g_->_gsites;
 
     //loop over left dv batches
@@ -982,8 +993,8 @@ void DmfComputation<FImpl,T,Tio>
                         LOG(Message) << "Saving time slices : " << MDistil::timeslicesDump(ts_intersection) << std::endl;
 
                         START_TIMER("distil vectors");
-                        makeDvLapSpinBatch(dv, n_idx, epack, Side::left, batch_dtL, peramb);
-                        makeDvLapSpinBatch(dv, n_idx, epack, Side::right, batch_dtR, peramb);
+                        makeDvLapSpinBatch(dv, n_idx, epack, Side::left, batch_dtL, peramb, displacement);
+                        makeDvLapSpinBatch(dv, n_idx, epack, Side::right, batch_dtR, peramb, displacement);
                         STOP_TIMER("distil vectors");
 
                         unsigned int nblocki = dilSizeLS_.at(Side::left)/blockSize_ + (((dilSizeLS_.at(Side::left) % blockSize_) != 0) ? 1 : 0);
