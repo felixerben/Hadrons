@@ -76,9 +76,6 @@ using DilutionMap  = std::array<std::vector<std::vector<unsigned int>>,3>;
 enum Side {left = 0, right = 1};
 const std::vector<Side> sides =  {Side::left,Side::right};  //for easy looping over sides
 
-//descriptor of the operator type in the meson field
-GRID_SERIALIZABLE_ENUM(opType, undef, singleSite, 0, disp1, 1, disp2, 2, disp2L, 3);
-
 // metadata serialiser class
 template <typename FImpl>
 class DistilMesonFieldMetadata: Serializable
@@ -319,7 +316,7 @@ void DistilMatrixIo<T>::load(Vec<VecT> &v, const unsigned int t, const std::stri
 //# computation class declaration    #
 //####################################
 
-template <typename FImpl, typename T, typename Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
 class DmfComputation
 {
 public:
@@ -393,15 +390,16 @@ private:
                                       Side                              s,
                                       unsigned int                      dt,
                                       unsigned int                      iibatch,
+                                      GaugeField                        U,
                                       std::map<Side, PerambTensor&>     peramb={},
-                                      opType                            displacement=opType::singleSite);
+                                      std::vector<unsigned int>         displacement={0,0,0});
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
                                       LapPack&                          epack,
                                       Side                              s,
                                       std::vector<unsigned int>         dt_list,
                                       std::map<Side, PerambTensor&>     peramb,
-                                      opType                            displacement);
+                                      std::vector<unsigned int>                            displacement);
     std::vector<unsigned int> fetchDvBatchIdxs(unsigned int               ibatch,
                                                std::vector<unsigned int>  time_dil_sources,
                                                unsigned int                    shift=0);
@@ -439,7 +437,7 @@ public:
                        Side                                           relative_side,
                        std::vector<unsigned int>                      delta_t_list,
                        std::map<Side, PerambTensor&>                  peramb={});//,
-              //         opType                                         displacement);
+              //         std::vector<unsigned int>                                         displacement);
     void executeFixed(const FilenameFn                               &filenameDmfFn,
                  const MetadataFn                               &metadataDmfFn,
                  std::vector<Gamma::Algebra>                    gamma,
@@ -458,8 +456,8 @@ public:
 //# computation class implementation #
 //####################################
 
-template <typename FImpl, typename T, typename Tio>
-DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+DmfComputation<FImpl, GImpl,T,Tio>
 ::DmfComputation(std::map<Side,std::string>     mf_type,
                  GridCartesian*                 g,
                  GridCartesian*                 g3d,
@@ -488,8 +486,8 @@ DmfComputation<FImpl,T,Tio>
     vectorStem_ = { {Side::left,left_vector_stem} , {Side::right,right_vector_stem}};
 }
 
-template <typename FImpl, typename T, typename Tio>
-DilutionMap DmfComputation<FImpl,T,Tio>::fetchDilutionMap(Side s)
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+DilutionMap DmfComputation<FImpl, GImpl,T,Tio>::fetchDilutionMap(Side s)
 {
     DilutionMap m;
     for(auto dil_idx : { Index::t, Index::l, Index::s })
@@ -501,20 +499,20 @@ DilutionMap DmfComputation<FImpl,T,Tio>::fetchDilutionMap(Side s)
     return m;
 }
 
-template <typename FImpl, typename T, typename Tio>
-bool DmfComputation<FImpl,T,Tio>::isPhi(Side s)
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+bool DmfComputation<FImpl, GImpl,T,Tio>::isPhi(Side s)
 {
     return (dmfType_.at(s)=="phi" ? true : false);
 }
 
-template <typename FImpl, typename T, typename Tio>
-bool DmfComputation<FImpl,T,Tio>::isRho(Side s)
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+bool DmfComputation<FImpl, GImpl,T,Tio>::isRho(Side s)
 {
     return (dmfType_.at(s)=="rho" ? true : false);
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl, GImpl,T,Tio>
 ::makePhiComponent(FermionField&            phi_component,
                    DistillationNoise&       n,
                    const unsigned int       n_idx,
@@ -542,8 +540,8 @@ void DmfComputation<FImpl,T,Tio>
     }
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl, GImpl,T,Tio>
 ::loadPhiComponent(FermionField&            phi_component,
                    DistillationNoise&       n,
                    const unsigned int       n_idx,
@@ -556,8 +554,8 @@ void DmfComputation<FImpl,T,Tio>
                                     n.dilutionSize(Index::l), n.dilutionSize(Index::s), n.dilutionSize(Index::t), D, traj_);
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeRhoComponent(FermionField&        rho_component,
                    DistillationNoise&   n,
                    const unsigned int   n_idx,
@@ -568,16 +566,17 @@ void DmfComputation<FImpl,T,Tio>
 
 // lap-spin blocks have fixed dimensions of (lap-spin dilution size left)x(lap-spin dilution size right)
 // and each is identified by the starting posision in time dilution space, (dtL,dtR)
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeDvLapSpinBlock(std::map<Side, DistilVector&>                  dv,
                                std::map<Side, unsigned int>         n_idx,
                                LapPack&                             epack,
                                Side                                 s,
                                unsigned int                         dt,
                                unsigned int                         iibatch,
+                               GaugeField                           U,
                                std::map<Side, PerambTensor&>        peramb,
-                               opType                               displacement)
+                               std::vector<unsigned int>            displacement)
 {
     unsigned int D_offset = distilNoise_.at(s).dilutionIndex(dt,0,0);    // t is the slowest index
     unsigned int iD_offset = iibatch*dilSizeLS_.at(s);
@@ -599,19 +598,72 @@ void DmfComputation<FImpl,T,Tio>
         {
             makeRhoComponent(dv.at(s)[iD] , distilNoise_.at(s) , n_idx.at(s) , D);
         }
+        // loop throug displacement vector
+        for(unsigned int ix = 0; ix < displacement[0]; ix++)
+        {
+            //displace in x direction
+            DistilVector shift,diff;
+            // this could be more general with more input - here we are assuming that one always wants to shift the RHS field forwards and the LHS one backwards
+            if(s==Side::right)
+            {
+                shift = Grid::PeriodicBC::CovShiftForward(U[1],1,dv.at(s));
+                diff = shift - dv.at(s);
+                dv.at(s) = diff;
+            }
+            else
+            {
+                shift = Grid::PeriodicBC::CovShiftBackward(U[1],1,dv.at(s));
+                diff = dv.at(s) - shift;
+                dv.at(s) = diff;
+            }
+        }
+        for(unsigned int iy = 0; iy < displacement[1]; iy++)
+        {
+            //displace in y direction
+            DistilVector shift,diff;
+            if(s==Side::right)
+            {
+                shift = Grid::PeriodicBC::CovShiftForward(U[2],2,dv.at(s));
+                diff = shift - dv.at(s);
+                dv.at(s) = diff;
+            }
+            else
+            {
+                shift = Grid::PeriodicBC::CovShiftBackward(U[2],2,dv.at(s));
+                diff = dv.at(s) - shift;
+                dv.at(s) = diff;
+            }
+        }
+        for(unsigned int iz = 0; iz < displacement[2]; iz++)
+        {
+            //displace in z direction
+            DistilVector shift,diff;
+            if(s==Side::right)
+            {
+                shift = Grid::PeriodicBC::CovShiftForward(U[3],3,dv.at(s));
+                diff = shift - dv.at(s);
+                dv.at(s) = diff;
+            }
+            else
+            {
+                shift = Grid::PeriodicBC::CovShiftBackward(U[3],3,dv.at(s));
+                diff = dv.at(s) - shift;
+                dv.at(s) = diff;
+            }
+        }
     }
 }
 
 // a batch is composed of several lap-spin blocks
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeDvLapSpinBatch(std::map<Side, DistilVector&>              dv,
                                std::map<Side, unsigned int>     n_idx,
                                LapPack&                         epack,
                                Side                             s,
                                std::vector<unsigned int>        dt_list,
                                std::map<Side, PerambTensor&>    peramb,
-                               opType                           displacement)
+                               std::vector<unsigned int>                           displacement)
 {
     for(unsigned int idt=0 ; idt<dt_list.size() ; idt++)
     {
@@ -620,8 +672,8 @@ void DmfComputation<FImpl,T,Tio>
 }
 
 // fetch time dilution indices (sources) in dv batch ibatch
-template <typename FImpl, typename T, typename Tio>
-std::vector<unsigned int> DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+std::vector<unsigned int> DmfComputation<FImpl,GImpl,T,Tio>
 ::fetchDvBatchIdxs(unsigned int ibatch, std::vector<unsigned int> time_dil_sources, const unsigned int shift)
 {
     std::vector<unsigned int> batch_dt;
@@ -633,8 +685,8 @@ std::vector<unsigned int> DmfComputation<FImpl,T,Tio>
 
 // makeRelative methods build distil vectors with reorganised time slices
 // (in order to compute multiple time-dilution blocks at different t with a single call of MesonField kernel)
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeRelativePhiComponent(FermionField&            phi_component,
                    DistillationNoise&               n,
                    const unsigned int               n_idx,
@@ -680,8 +732,8 @@ void DmfComputation<FImpl,T,Tio>
     }
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeRelativeRhoComponent(FermionField&        rho_component,
                    DistillationNoise&           n,
                    const unsigned int           n_idx,
@@ -720,8 +772,8 @@ void DmfComputation<FImpl,T,Tio>
     }
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::makeRelativeDvLapSpinBlock(std::map<Side, DistilVector&>              dv,
                                std::vector<unsigned int>                dt_list,
                                std::map<Side, unsigned int>             n_idx,
@@ -752,8 +804,8 @@ void DmfComputation<FImpl,T,Tio>
     }
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::executeRelative(const FilenameFn                            &filenameDmfFn,
                 const MetadataFn                              &metadataDmfFn,
                 std::vector<Gamma::Algebra>                   gamma,
@@ -766,9 +818,9 @@ void DmfComputation<FImpl,T,Tio>
                 Side                                          relative_side,
                 std::vector<unsigned int>                     delta_t_list,
                 std::map<Side, PerambTensor&>                 peramb)//,
-    //            opType                                        displacement)
+    //            std::vector<unsigned int>                                        displacement)
 {
-    opType displacement = opType::disp2; //TODO: change later
+    std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
     const unsigned int vol = g_->_gsites;
     Side anchored_side = (relative_side==Side::right ? Side::left : Side::right);
 
@@ -934,8 +986,8 @@ void DmfComputation<FImpl,T,Tio>
     }
 }
 
-template <typename FImpl, typename T, typename Tio>
-void DmfComputation<FImpl,T,Tio>
+template <typename FImpl, typename GImpl, typename T, typename Tio>
+void DmfComputation<FImpl,GImpl,T,Tio>
 ::executeFixed(const FilenameFn                         &filenameDmfFn,
           const MetadataFn                              &metadataDmfFn,
           std::vector<Gamma::Algebra>                   gamma,
@@ -949,7 +1001,7 @@ void DmfComputation<FImpl,T,Tio>
           const unsigned int                            diag_shift,
           std::map<Side, PerambTensor&>                 peramb)
 {
-    opType displacement = opType::disp2; //TODO: change later
+    std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
     const unsigned int vol = g_->_gsites;
 
     //loop over left dv batches

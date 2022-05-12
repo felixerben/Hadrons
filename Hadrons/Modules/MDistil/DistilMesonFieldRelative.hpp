@@ -72,12 +72,12 @@ public:
                                     std::vector<std::string>,   momenta)
 };
 
-template <typename FImpl>
+template <typename FImpl, typename GImpl>
 class TDistilMesonFieldRelative: public Module<DistilMesonFieldRelativePar>
 {
 public:
     FERM_TYPE_ALIASES(FImpl,);
-    typedef DmfComputation<FImpl, Complex, HADRONS_DISTIL_IO_TYPE>    Computation;
+    typedef DmfComputation<FImpl, GImpl, Complex, HADRONS_DISTIL_IO_TYPE>    Computation;
 public:
     typedef typename Computation::Index Index;
     typedef typename Computation::DistilVector DistilVector;
@@ -109,21 +109,21 @@ private:
     std::vector<unsigned int>           delta_t_list_;
 };
 
-MODULE_REGISTER_TMP(DistilMesonFieldRelative, TDistilMesonFieldRelative<FIMPL>, MDistil);
+MODULE_REGISTER_TMP(DistilMesonFieldRelative, ARG(TDistilMesonFieldRelative<FIMPL,GIMPL>), MDistil);
 
 /******************************************************************************
  *                 TDistilMesonFieldRelative implementation                             *
  ******************************************************************************/
 // constructor /////////////////////////////////////////////////////////////////
-template <typename FImpl>
-TDistilMesonFieldRelative<FImpl>::TDistilMesonFieldRelative(const std::string name)
+template <typename FImpl, typename GImpl>
+TDistilMesonFieldRelative<FImpl,GImpl>::TDistilMesonFieldRelative(const std::string name)
 : Module<DistilMesonFieldRelativePar>(name)
 {
 }
 
 // dependencies/products ///////////////////////////////////////////////////////
-template <typename FImpl>
-std::vector<std::string> TDistilMesonFieldRelative<FImpl>::getInput(void)
+template <typename FImpl, typename GImpl>
+std::vector<std::string> TDistilMesonFieldRelative<FImpl,GImpl>::getInput(void)
 {   
     std::vector<std::string> in = {par().lapEigenPack, par().leftNoise, par().rightNoise};
 
@@ -143,16 +143,16 @@ std::vector<std::string> TDistilMesonFieldRelative<FImpl>::getInput(void)
     return in;
 }
 
-template <typename FImpl>
-std::vector<std::string> TDistilMesonFieldRelative<FImpl>::getOutput(void)
+template <typename FImpl, typename GImpl>
+std::vector<std::string> TDistilMesonFieldRelative<FImpl,GImpl>::getOutput(void)
 {
     std::vector<std::string> out = {};
     return out;
 }
 
 // setup ///////////////////////////////////////////////////////////////////////
-template <typename FImpl>
-void TDistilMesonFieldRelative<FImpl>::setup(void)
+template <typename FImpl, typename GImpl>
+void TDistilMesonFieldRelative<FImpl,GImpl>::setup(void)
 {
     GridCartesian *g            = envGetGrid(FermionField);
     GridCartesian *g3d          = envGetSliceGrid(FermionField, g->Nd() - 1);
@@ -282,8 +282,8 @@ void TDistilMesonFieldRelative<FImpl>::setup(void)
 }
 
 // execution ///////////////////////////////////////////////////////////////////
-template <typename FImpl>
-void TDistilMesonFieldRelative<FImpl>::execute(void)
+template <typename FImpl, typename GImpl>
+void TDistilMesonFieldRelative<FImpl,GImpl>::execute(void)
 {
     // temps
     envGetTmp(DistilVector, dvl);

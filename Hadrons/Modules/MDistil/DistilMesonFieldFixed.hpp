@@ -67,12 +67,12 @@ public:
                                     std::vector<std::string>,   momenta)
 };
 
-template <typename FImpl>
+template <typename FImpl,typename GImpl>
 class TDistilMesonFieldFixed: public Module<DistilMesonFieldFixedPar>
 {
 public:
     FERM_TYPE_ALIASES(FImpl,);
-    typedef DmfComputation<FImpl, Complex, HADRONS_DISTIL_IO_TYPE>    Computation;
+    typedef DmfComputation<FImpl, GImpl, Complex, HADRONS_DISTIL_IO_TYPE>    Computation;
 public:
     typedef typename Computation::Index Index;
     typedef typename Computation::DistilVector DistilVector;
@@ -104,20 +104,20 @@ private:
     std::map<Side, std::string>         vectorNames_;
 };
 
-MODULE_REGISTER_TMP(DistilMesonFieldFixed, TDistilMesonFieldFixed<FIMPL>, MDistil);
+MODULE_REGISTER_TMP(DistilMesonFieldFixed, ARG(TDistilMesonFieldFixed<FIMPL, GIMPL>), MDistil);
 
 /******************************************************************************
  *                 TDistilMesonFieldFixed implementation                             *
  ******************************************************************************/
 // constructor /////////////////////////////////////////////////////////////////
-template <typename FImpl>
-TDistilMesonFieldFixed<FImpl>::TDistilMesonFieldFixed(const std::string name)
+template <typename FImpl, typename GImpl>
+TDistilMesonFieldFixed<FImpl,GImpl>::TDistilMesonFieldFixed(const std::string name)
 : Module<DistilMesonFieldFixedPar>(name)
 {}
 
 // dependencies/products ///////////////////////////////////////////////////////
-template <typename FImpl>
-std::vector<std::string> TDistilMesonFieldFixed<FImpl>::getInput(void)
+template <typename FImpl, typename GImpl>
+std::vector<std::string> TDistilMesonFieldFixed<FImpl,GImpl>::getInput(void)
 {   
     std::vector<std::string> in = {par().lapEigenPack, par().leftNoise, par().rightNoise};
 
@@ -137,8 +137,8 @@ std::vector<std::string> TDistilMesonFieldFixed<FImpl>::getInput(void)
     return in;
 }
 
-template <typename FImpl>
-std::vector<std::string> TDistilMesonFieldFixed<FImpl>::getOutput(void)
+template <typename FImpl, typename GImpl>
+std::vector<std::string> TDistilMesonFieldFixed<FImpl,GImpl>::getOutput(void)
 {
     std::vector<std::string> out = {getName()};
     
@@ -146,8 +146,8 @@ std::vector<std::string> TDistilMesonFieldFixed<FImpl>::getOutput(void)
 }
 
 // setup ///////////////////////////////////////////////////////////////////////
-template <typename FImpl>
-void TDistilMesonFieldFixed<FImpl>::setup(void)
+template <typename FImpl, typename GImpl>
+void TDistilMesonFieldFixed<FImpl,GImpl>::setup(void)
 {
     GridCartesian *g            = envGetGrid(FermionField);
     GridCartesian *g3d          = envGetSliceGrid(FermionField, g->Nd() - 1);
@@ -254,8 +254,8 @@ void TDistilMesonFieldFixed<FImpl>::setup(void)
 }
 
 // execution ///////////////////////////////////////////////////////////////////
-template <typename FImpl>
-void TDistilMesonFieldFixed<FImpl>::execute(void)
+template <typename FImpl, typename GImpl>
+void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
 {
     // temps
     envGetTmp(DistilVector, dvl);

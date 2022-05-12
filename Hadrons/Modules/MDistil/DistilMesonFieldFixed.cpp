@@ -32,4 +32,4 @@ using namespace Grid;
 using namespace Hadrons;
 using namespace MDistil;
 
-template class Grid::Hadrons::MDistil::TDistilMesonFieldFixed<FIMPL>;
+template class Grid::Hadrons::MDistil::TDistilMesonFieldFixed<FIMPL,GIMPL>;
