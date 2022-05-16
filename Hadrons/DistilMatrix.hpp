@@ -391,15 +391,16 @@ private:
                                       unsigned int                      dt,
                                       unsigned int                      iibatch,
                                       GaugeField                        U,
-                                      std::map<Side, PerambTensor&>     peramb={},
-                                      std::map<Side, std::vector<int>>  displacement={0,0,0});
+                                      std::map<Side, std::vector<int>>  displacement,
+                                      std::map<Side, PerambTensor&>     peramb={});
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
                                       LapPack&                          epack,
                                       Side                              s,
                                       std::vector<unsigned int>         dt_list,
-                                      std::map<Side, PerambTensor&>     peramb,
-                                      std::vector<unsigned int>                            displacement);
+                                      GaugeField                        U,
+                                      std::map<Side, std::vector<int>>  displacement,
+                                      std::map<Side, PerambTensor&>     peramb);
     std::vector<unsigned int> fetchDvBatchIdxs(unsigned int               ibatch,
                                                std::vector<unsigned int>  time_dil_sources,
                                                unsigned int                    shift=0);
@@ -436,8 +437,9 @@ public:
                        TimerArray*                                    tarray,
                        Side                                           relative_side,
                        std::vector<unsigned int>                      delta_t_list,
-                       std::map<Side, PerambTensor&>                  peramb={});//,
-              //         std::vector<unsigned int>                                         displacement);
+                       GaugeField                                     U,
+                       std::map<Side, std::vector<int>>               displacement,
+                       std::map<Side, PerambTensor&>                  peramb={});
     void executeFixed(const FilenameFn                               &filenameDmfFn,
                  const MetadataFn                               &metadataDmfFn,
                  std::vector<Gamma::Algebra>                    gamma,
@@ -449,6 +451,8 @@ public:
                  TimerArray*                                    tarray,
                  bool                                           only_diag,
                  const unsigned int                             diag_shift,
+                 GaugeField                                     U,
+                 std::map<Side, std::vector<int>>               displacement,
                  std::map<Side, PerambTensor&>                  peramb={});
 };
 
@@ -575,8 +579,8 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                unsigned int                         dt,
                                unsigned int                         iibatch,
                                GaugeField                           U,
-                               std::map<Side, PerambTensor&>        peramb,
-                               std::map<Side,std::vector<int>>      displacement)
+                               std::map<Side, std::vector<int>>     displacement,
+                               std::map<Side, PerambTensor&>        peramb)
 {
     unsigned int D_offset = distilNoise_.at(s).dilutionIndex(dt,0,0);    // t is the slowest index
     unsigned int iD_offset = iibatch*dilSizeLS_.at(s);
@@ -631,8 +635,9 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                LapPack&                         epack,
                                Side                             s,
                                std::vector<unsigned int>        dt_list,
-                               std::map<Side, PerambTensor&>    peramb,
-                               std::vector<unsigned int>                           displacement)
+                               GaugeField                        U,
+                               std::map<Side, std::vector<int>>  displacement,
+                               std::map<Side, PerambTensor&>    peramb)
 {
     for(unsigned int idt=0 ; idt<dt_list.size() ; idt++)
     {
@@ -749,6 +754,8 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                LapPack&                                 epack,
                                Side                                     s,
                                const unsigned int                       delta_t,
+                               GaugeField                               U,
+                               std::map<Side, std::vector<int>>         displacement,
                                std::map<Side, PerambTensor&>            peramb)
 {
     for(unsigned int D=0 ; D<dilSizeLS_.at(s) ; D++)
@@ -786,8 +793,9 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 TimerArray*                                   tarray,
                 Side                                          relative_side,
                 std::vector<unsigned int>                     delta_t_list,
-                std::map<Side, PerambTensor&>                 peramb)//,
-    //            std::vector<unsigned int>                                        displacement)
+                GaugeField                                    U,
+                std::map<Side, std::vector<int>>              displacement,
+                std::map<Side, PerambTensor&>                 peramb)
 {
     std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
     const unsigned int vol = g_->_gsites;
@@ -968,6 +976,8 @@ void DmfComputation<FImpl,GImpl,T,Tio>
           TimerArray*                                   tarray,
           bool                                          only_diag,
           const unsigned int                            diag_shift,
+          GaugeField                                    U,
+          std::map<Side, std::vector<int>>              displacement,
           std::map<Side, PerambTensor&>                 peramb)
 {
     std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
