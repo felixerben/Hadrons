@@ -392,7 +392,7 @@ private:
                                       unsigned int                      iibatch,
                                       GaugeField                        U,
                                       std::map<Side, PerambTensor&>     peramb={},
-                                      std::vector<unsigned int>         displacement={0,0,0});
+                                      std::map<Side, std::vector<int>>  displacement={0,0,0});
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
                                       LapPack&                          epack,
@@ -576,7 +576,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                unsigned int                         iibatch,
                                GaugeField                           U,
                                std::map<Side, PerambTensor&>        peramb,
-                               std::vector<unsigned int>            displacement)
+                               std::map<Side,std::vector<int>>      displacement)
 {
     unsigned int D_offset = distilNoise_.at(s).dilutionIndex(dt,0,0);    // t is the slowest index
     unsigned int iD_offset = iibatch*dilSizeLS_.at(s);
@@ -598,57 +598,26 @@ void DmfComputation<FImpl,GImpl,T,Tio>
         {
             makeRhoComponent(dv.at(s)[iD] , distilNoise_.at(s) , n_idx.at(s) , D);
         }
-        // loop throug displacement vector
-        for(unsigned int ix = 0; ix < displacement[0]; ix++)
+        // loop through xyz of displacement vector
+        for(unsigned int direction = 0; direction < 3; direction++)
         {
-            //displace in x direction
-            DistilVector shift,diff;
-            // this could be more general with more input - here we are assuming that one always wants to shift the RHS field forwards and the LHS one backwards
-            if(s==Side::right)
+            // multiple displacements per direction possible
+            for(unsigned int ix = 0; ix < std::abs(displacement.at(s)[direction]); ix++)
             {
-                shift = Grid::PeriodicBC::CovShiftForward(U[1],1,dv.at(s));
-                diff = shift - dv.at(s);
-                dv.at(s) = diff;
-            }
-            else
-            {
-                shift = Grid::PeriodicBC::CovShiftBackward(U[1],1,dv.at(s));
-                diff = dv.at(s) - shift;
-                dv.at(s) = diff;
-            }
-        }
-        for(unsigned int iy = 0; iy < displacement[1]; iy++)
-        {
-            //displace in y direction
-            DistilVector shift,diff;
-            if(s==Side::right)
-            {
-                shift = Grid::PeriodicBC::CovShiftForward(U[2],2,dv.at(s));
-                diff = shift - dv.at(s);
-                dv.at(s) = diff;
-            }
-            else
-            {
-                shift = Grid::PeriodicBC::CovShiftBackward(U[2],2,dv.at(s));
-                diff = dv.at(s) - shift;
-                dv.at(s) = diff;
-            }
-        }
-        for(unsigned int iz = 0; iz < displacement[2]; iz++)
-        {
-            //displace in z direction
-            DistilVector shift,diff;
-            if(s==Side::right)
-            {
-                shift = Grid::PeriodicBC::CovShiftForward(U[3],3,dv.at(s));
-                diff = shift - dv.at(s);
-                dv.at(s) = diff;
-            }
-            else
-            {
-                shift = Grid::PeriodicBC::CovShiftBackward(U[3],3,dv.at(s));
-                diff = dv.at(s) - shift;
-                dv.at(s) = diff;
+                DistilVector shift,diff;
+                if(displacement.at(s)[direction]>0)
+                {
+                    //this might be the wrong derivative? TODO: Put the correct one
+                    shift = FImpl::CovShiftForward(U[ix],ix,dv.at(s));
+                    diff = shift - dv.at(s);
+                    dv.at(s) = diff;
+                }
+                else
+                {
+                    shift = FImpl::CovShiftBackward(U[ix],ix,dv.at(s));
+                    diff = dv.at(s) - shift;
+                    dv.at(s) = diff;
+                }
             }
         }
     }
