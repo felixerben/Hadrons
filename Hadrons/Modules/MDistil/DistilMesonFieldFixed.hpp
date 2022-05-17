@@ -64,7 +64,10 @@ public:
                                     std::string,                onlyDiagonal,
                                     std::string,                deltaT,
                                     std::string,                gamma,
-                                    std::vector<std::string>,   momenta)
+                                    std::vector<std::string>,   momenta,
+                                    std::string,                leftDisplacement,
+                                    std::string,                rightDisplacement,
+                                    std::string,                gauge)
 };
 
 template <typename FImpl,typename GImpl>
@@ -102,6 +105,7 @@ private:
     std::vector<unsigned int>           tSourceR_;
     std::map<Side, std::string>         perambNames_;
     std::map<Side, std::string>         vectorNames_;
+    std::map<Side, std::vector<int>>    displacement_;
 };
 
 MODULE_REGISTER_TMP(DistilMesonFieldFixed, ARG(TDistilMesonFieldFixed<FIMPL, GIMPL>), MDistil);
@@ -251,6 +255,20 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::setup(void)
     envTmp(DistilVector,                "dvr",          1, DISTILVECTOR_TIME_BATCH_SIZE*dilSizeLS_.at(Side::right), g);
     envTmp(Computation,                 "computation",  1, dmfType_, g, g3d, noisel, noiser, par().blockSize, 
                 par().cacheSize, env().getDim(g->Nd() - 1), momenta_.size(), gamma_.size(), isExact_, vm().getTrajectory(), par().leftVectorStem, par().rightVectorStem);
+   
+    if((par().leftDisplacement.empty() and !par().leftDisplacement.empty()) or (!par().leftDisplacement.empty() and par().leftDisplacement.empty()))
+    {
+        HADRONS_ERROR(Argument, "Either give displacement input for both or neither sides. (Input can be 0 0 0)");
+    }
+    if(!par().leftDisplacement.empty())
+    {
+        envTmpLat(GaugeField, "Umu");
+    }
+    else
+    {
+        envTmpLat(GaugeField, "dummy");
+    }
+
 }
 
 // execution ///////////////////////////////////////////////////////////////////
@@ -275,6 +293,25 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
     DistillationNoise &noisel = envGet( DistillationNoise , par().leftNoise);
     DistillationNoise &noiser = envGet( DistillationNoise , par().rightNoise);
     std::vector<std::vector<unsigned int>>       noise_pairs;
+
+    bool dispOp = !par().leftDisplacement.empty() and !par().rightDisplacement.empty();
+    if(dispOp)
+    {
+        envGetTmp(GaugeField, Umu);
+        auto dispL = strToVec<int>(par().leftDisplacement);
+        auto dispR = strToVec<int>(par().rightDisplacement);
+        if (dispL.size() != 3 or dispR.size() != 3)
+        {
+            HADRONS_ERROR(Size, "Displacements need to be 3-vectors");
+        }
+        displacement_.at(Side::left)  = dispL;
+        displacement_.at(Side::right) = dispR;
+    }
+    else
+    {
+        displacement_.at(Side::left)  = {0,0,0};
+        displacement_.at(Side::right) = {0,0,0};
+    }
 
     // nvec check against noises (and assuming nvec cannot be different on different sides!)
     std::map<Side, DistillationNoise & > noises = {{Side::left,noisel},{Side::right,noiser}};
@@ -451,11 +488,29 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
                     peramb.emplace(s , perambtemp);
                 }
             }
-            computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, peramb);
+            if(dispOp)
+            {
+                envGetTmp(GaugeField, Umu);
+                computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, Umu, displacement_, peramb);
+            }
+            else
+            {
+                envGetTmp(GaugeField, dummy);
+                computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, dummy, displacement_, peramb);
+            }
         }
         else
         {
-            computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_);
+            if(dispOp)
+            {
+                envGetTmp(GaugeField, Umu);
+                computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, Umu, displacement_);
+            }
+            else
+            {
+                envGetTmp(GaugeField, dummy);
+                computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, dummy, displacement_);
+            }
         }
         LOG(Message) << "Meson fields saved to " << outputMFPath_ << std::endl;
     }

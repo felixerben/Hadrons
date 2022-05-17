@@ -424,6 +424,8 @@ private:
                                LapPack&                             epack,
                                Side                                 s,
                                const unsigned int                   delta_t,
+                               GaugeField                           U,
+                               std::map<Side, std::vector<int>>     displacement,
                                std::map<Side, PerambTensor&>        peramb);
 public:
     void executeRelative(const FilenameFn                             &filenameDmfFn,
@@ -606,21 +608,25 @@ void DmfComputation<FImpl,GImpl,T,Tio>
         for(unsigned int direction = 0; direction < 3; direction++)
         {
             // multiple displacements per direction possible
-            for(unsigned int ix = 0; ix < std::abs(displacement.at(s)[direction]); ix++)
+            int nx = displacement.at(s)[direction];
+            for(unsigned int ix = 0; ix < std::abs(nx); ix++)
             {
                 DistilVector shift,diff;
+                FermionField tmp(U.Grid()); 
+                typename GImpl::GaugeLinkField Umu(U.Grid());
+                Umu=peekLorentz(U,ix);
                 if(displacement.at(s)[direction]>0)
                 {
                     //this might be the wrong derivative? TODO: Put the correct one
-                    shift = FImpl::CovShiftForward(U[ix],ix,dv.at(s));
-                    diff = shift - dv.at(s);
-                    dv.at(s) = diff;
+                    tmp = GImpl::CovShiftForward( Umu,ix,dv.at(s)[iD] );
+                    tmp = tmp - dv.at(s)[iD];
+                    dv.at(s)[iD] = tmp;
                 }
                 else
                 {
-                    shift = FImpl::CovShiftBackward(U[ix],ix,dv.at(s));
-                    diff = dv.at(s) - shift;
-                    dv.at(s) = diff;
+                    tmp = GImpl::CovShiftBackward( Umu,ix,dv.at(s)[iD] );
+                    tmp = dv.at(s)[iD] - tmp;
+                    dv.at(s)[iD] = tmp;
                 }
             }
         }
@@ -635,13 +641,13 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                LapPack&                         epack,
                                Side                             s,
                                std::vector<unsigned int>        dt_list,
-                               GaugeField                        U,
-                               std::map<Side, std::vector<int>>  displacement,
+                               GaugeField                       U,
+                               std::map<Side, std::vector<int>> displacement,
                                std::map<Side, PerambTensor&>    peramb)
 {
     for(unsigned int idt=0 ; idt<dt_list.size() ; idt++)
     {
-        makeDvLapSpinBlock(dv,n_idx,epack,s,dt_list[idt],idt,peramb,displacement);
+        makeDvLapSpinBlock(dv,n_idx,epack,s,dt_list[idt],idt,U,displacement,peramb);
     }
 }
 
@@ -797,14 +803,13 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 std::map<Side, std::vector<int>>              displacement,
                 std::map<Side, PerambTensor&>                 peramb)
 {
-    std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
     const unsigned int vol = g_->_gsites;
     Side anchored_side = (relative_side==Side::right ? Side::left : Side::right);
 
     for(auto delta_t : delta_t_list)
     {        
         START_TIMER("distil vectors");
-        makeRelativeDvLapSpinBlock(dv, time_dil_source.at(relative_side), n_idx, epack, relative_side, delta_t, peramb);
+        makeRelativeDvLapSpinBlock(dv, time_dil_source.at(relative_side), n_idx, epack, relative_side, delta_t, U, displacement, peramb);
         STOP_TIMER("distil vectors");
 
         //loop over left dv batches
@@ -813,7 +818,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
             START_TIMER("distil vectors");
             std::vector<unsigned int> batch_dtAnchored;
             batch_dtAnchored = fetchDvBatchIdxs(ibatchAnchored,time_dil_source.at(anchored_side));
-            makeDvLapSpinBatch(dv, n_idx, epack, anchored_side, batch_dtAnchored, peramb, displacement);
+            makeDvLapSpinBatch(dv, n_idx, epack, anchored_side, batch_dtAnchored, U, displacement, peramb);
             STOP_TIMER("distil vectors");
             for (unsigned int idtAnchored=0 ; idtAnchored<batch_dtAnchored.size() ; idtAnchored++)
             {
@@ -980,7 +985,6 @@ void DmfComputation<FImpl,GImpl,T,Tio>
           std::map<Side, std::vector<int>>              displacement,
           std::map<Side, PerambTensor&>                 peramb)
 {
-    std::vector<unsigned int> displacement = {1,0,0}; //TODO: change later
     const unsigned int vol = g_->_gsites;
 
     //loop over left dv batches
@@ -1024,8 +1028,8 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                         LOG(Message) << "Saving time slices : " << MDistil::timeslicesDump(ts_intersection) << std::endl;
 
                         START_TIMER("distil vectors");
-                        makeDvLapSpinBatch(dv, n_idx, epack, Side::left, batch_dtL, peramb, displacement);
-                        makeDvLapSpinBatch(dv, n_idx, epack, Side::right, batch_dtR, peramb, displacement);
+                        makeDvLapSpinBatch(dv, n_idx, epack, Side::left,  batch_dtL, U, displacement, peramb);
+                        makeDvLapSpinBatch(dv, n_idx, epack, Side::right, batch_dtR, U, displacement, peramb);
                         STOP_TIMER("distil vectors");
 
                         unsigned int nblocki = dilSizeLS_.at(Side::left)/blockSize_ + (((dilSizeLS_.at(Side::left) % blockSize_) != 0) ? 1 : 0);
