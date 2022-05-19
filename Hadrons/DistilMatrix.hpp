@@ -607,7 +607,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
         // loop through xyz of displacement vector
         for(unsigned int direction = 0; direction < 3; direction++)
         {
-            FermionField tmp(U.Grid()); 
+            FermionField tmp(U.Grid()); // from the environment??? 
             typename GImpl::GaugeLinkField Umu(U.Grid());
             Umu=peekLorentz(U,direction);
             // multiple displacements per direction possible
