@@ -607,14 +607,13 @@ void DmfComputation<FImpl,GImpl,T,Tio>
         // loop through xyz of displacement vector
         for(unsigned int direction = 0; direction < 3; direction++)
         {
+            FermionField tmp(U.Grid()); 
+            typename GImpl::GaugeLinkField Umu(U.Grid());
+            Umu=peekLorentz(U,direction);
             // multiple displacements per direction possible
             int nx = displacement.at(s)[direction];
             for(unsigned int ix = 0; ix < std::abs(nx); ix++)
             {
-                DistilVector shift,diff;
-                FermionField tmp(U.Grid()); 
-                typename GImpl::GaugeLinkField Umu(U.Grid());
-                Umu=peekLorentz(U,ix);
                 if(displacement.at(s)[direction]>0)
                 {
                     //this might be the wrong derivative? TODO: Put the correct one
