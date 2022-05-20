@@ -427,7 +427,23 @@ void TDistilMesonFieldRelative<FImpl,GImpl>::execute(void)
         {
             md.Momentum.push_back(pmu);
         }
-        md.Operator         = gamma_[o];
+        std::stringstream ss;
+        ss << gamma_[o];
+        std::string opString = ss.str();
+        if(dispOp_)
+        {
+            opString += "_dispL";
+            for (unsigned int ix = 0; ix < 3; ++ix)
+            {
+               opString += std::to_string(displacement_.at(Side::left)[ix]);
+            }
+            opString += "_dispR";
+            for (unsigned int ix = 0; ix < 3; ++ix)
+            {
+               opString += std::to_string(displacement_.at(Side::right)[ix]);
+            }
+        }
+        md.Operator         = opString;
         md.Nt               = nt;   
         md.Nvec             = nVec;     //nvec is the same for both sides
         md.NoisePair        = {nl,nr};
