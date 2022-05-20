@@ -781,6 +781,31 @@ void DmfComputation<FImpl,GImpl,T,Tio>
             {
                 makeRelativeRhoComponent(dv.at(s)[Drelative] , distilNoise_.at(s) , n_idx.at(s), D, delta_t , epack);
             }
+            // loop through xyz of displacement vector
+            for(unsigned int direction = 0; direction < 3; direction++)
+            {
+                FermionField tmp(U.Grid()); // from the environment??? 
+                typename GImpl::GaugeLinkField Umu(U.Grid());
+                Umu=peekLorentz(U,direction);
+                // multiple displacements per direction possible
+                int nx = displacement.at(s)[direction];
+                for(unsigned int ix = 0; ix < std::abs(nx); ix++)
+                {
+                    if(displacement.at(s)[direction]>0)
+                    {
+                        //this might be the wrong derivative? TODO: Put the correct one
+                        tmp = GImpl::CovShiftForward( Umu,ix,dv.at(s)[Drelative] );
+                        tmp = tmp - dv.at(s)[Drelative];
+                        dv.at(s)[Drelative] = tmp;
+                    }
+                    else
+                    {
+                        tmp = GImpl::CovShiftBackward( Umu,ix,dv.at(s)[Drelative] );
+                        tmp = dv.at(s)[Drelative] - tmp;
+                        dv.at(s)[Drelative] = tmp;
+                    }
+                }
+            }
         }
     }
 }

@@ -98,6 +98,7 @@ private:
     std::vector<std::vector<RealF>>     momenta_;
     std::vector<Gamma::Algebra>         gamma_;  
     bool                                isExact_=false;
+    bool                                dispOp_=false;
     bool                                onlyDiag_=false;
     unsigned int                        diagShift_=0;
     std::map<Side,std::string>          dmfType_;
@@ -294,8 +295,8 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
     DistillationNoise &noiser = envGet( DistillationNoise , par().rightNoise);
     std::vector<std::vector<unsigned int>>       noise_pairs;
 
-    bool dispOp = !par().leftDisplacement.empty() and !par().rightDisplacement.empty();
-    if(dispOp)
+    dispOp_ = !par().leftDisplacement.empty() and !par().rightDisplacement.empty();
+    if(dispOp_)
     {
         envGetTmp(GaugeField, Umu);
         auto dispL = strToVec<int>(par().leftDisplacement);
@@ -304,13 +305,11 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
         {
             HADRONS_ERROR(Size, "Displacements need to be 3-vectors");
         }
-        displacement_.at(Side::left)  = dispL;
-        displacement_.at(Side::right) = dispR;
+        displacement_ = {{Side::left,dispL},{Side::right,dispR}};
     }
     else
     {
-        displacement_.at(Side::left)  = {0,0,0};
-        displacement_.at(Side::right) = {0,0,0};
+        displacement_ = {{Side::left,{0,0,0}},{Side::right,{0,0,0}}};
     }
 
     // nvec check against noises (and assuming nvec cannot be different on different sides!)
@@ -375,6 +374,19 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
         if(!isExact_)
         {
             filename += "_n" + std::to_string(nl) + "_" + std::to_string(nr) ;
+        }
+        if(dispOp_)
+        {
+            filename += "_dispL";
+            for (unsigned int ix = 0; ix < 3; ++ix)
+            {
+               filename += std::to_string(displacement_.at(Side::left)[ix]);
+            }
+            filename += "_dispR";
+            for (unsigned int ix = 0; ix < 3; ++ix)
+            {
+               filename += std::to_string(displacement_.at(Side::right)[ix]);
+            }
         }
         filename += ".h5";
         return filename;
@@ -488,7 +500,7 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
                     peramb.emplace(s , perambtemp);
                 }
             }
-            if(dispOp)
+            if(dispOp_)
             {
                 envGetTmp(GaugeField, Umu);
                 computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, Umu, displacement_, peramb);
@@ -501,7 +513,7 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
         }
         else
         {
-            if(dispOp)
+            if(dispOp_)
             {
                 envGetTmp(GaugeField, Umu);
                 computation.executeFixed(filenameDmfFn, metadataDmfFn, gamma_, dist_vecs, noise_idx, phase, time_sources, epack, this, onlyDiag_, diagShift_, Umu, displacement_);
