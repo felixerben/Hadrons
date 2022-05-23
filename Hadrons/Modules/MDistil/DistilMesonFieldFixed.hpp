@@ -106,7 +106,7 @@ private:
     std::vector<unsigned int>           tSourceR_;
     std::map<Side, std::string>         perambNames_;
     std::map<Side, std::string>         vectorNames_;
-    std::map<Side, std::vector<int>>    displacement_;
+    std::map<Side, std::string>         displacement_;
 };
 
 MODULE_REGISTER_TMP(DistilMesonFieldFixed, ARG(TDistilMesonFieldFixed<FIMPL, GIMPL>), MDistil);
@@ -256,18 +256,17 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::setup(void)
     envTmp(DistilVector,                "dvr",          1, DISTILVECTOR_TIME_BATCH_SIZE*dilSizeLS_.at(Side::right), g);
     envTmp(Computation,                 "computation",  1, dmfType_, g, g3d, noisel, noiser, par().blockSize, 
                 par().cacheSize, env().getDim(g->Nd() - 1), momenta_.size(), gamma_.size(), isExact_, vm().getTrajectory(), par().leftVectorStem, par().rightVectorStem);
+
+    MDistil::verifyDisplacementsInput(par().leftDisplacement);
+    MDistil::verifyDisplacementsInput(par().rightDisplacement);
    
-    if((par().leftDisplacement.empty() and !par().leftDisplacement.empty()) or (!par().leftDisplacement.empty() and par().leftDisplacement.empty()))
+    if(par().leftDisplacement.empty() and par().rightDisplacement.empty())
     {
-        HADRONS_ERROR(Argument, "Either give displacement input for both or neither sides. (Input can be 0 0 0)");
-    }
-    if(!par().leftDisplacement.empty())
-    {
-        envTmpLat(GaugeField, "Umu");
+        envTmpLat(GaugeField, "dummy");
     }
     else
     {
-        envTmpLat(GaugeField, "dummy");
+        envTmpLat(GaugeField, "Umu");
     }
 
 }
@@ -295,22 +294,16 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
     DistillationNoise &noiser = envGet( DistillationNoise , par().rightNoise);
     std::vector<std::vector<unsigned int>>       noise_pairs;
 
-    dispOp_ = !par().leftDisplacement.empty() and !par().rightDisplacement.empty();
+    dispOp_ = !(par().leftDisplacement.empty() and par().rightDisplacement.empty());
     if(dispOp_)
     {
         envGetTmp(GaugeField, Umu);
-        auto dispL = strToVec<int>(par().leftDisplacement);
-        auto dispR = strToVec<int>(par().rightDisplacement);
-        if (dispL.size() != 3 or dispR.size() != 3)
-        {
-            HADRONS_ERROR(Size, "Displacements need to be 3-vectors");
-        }
-        displacement_ = {{Side::left,dispL},{Side::right,dispR}};
     }
     else
     {
-        displacement_ = {{Side::left,{0,0,0}},{Side::right,{0,0,0}}};
+        envGetTmp(GaugeField, dummy);
     }
+    displacement_ = {{Side::left,par().leftDisplacement},{Side::right,par().rightDisplacement}};
 
     // nvec check against noises (and assuming nvec cannot be different on different sides!)
     std::map<Side, DistillationNoise & > noises = {{Side::left,noisel},{Side::right,noiser}};
@@ -378,15 +371,9 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
         if(dispOp_)
         {
             filename += "_dispL";
-            for (unsigned int ix = 0; ix < 3; ++ix)
-            {
-               filename += std::to_string(displacement_.at(Side::left)[ix]);
-            }
+            filename += par().leftDisplacement;
             filename += "_dispR";
-            for (unsigned int ix = 0; ix < 3; ++ix)
-            {
-               filename += std::to_string(displacement_.at(Side::right)[ix]);
-            }
+            filename += par().rightDisplacement;
         }
         filename += ".h5";
         return filename;
@@ -405,15 +392,9 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
         if(dispOp_)
         {
             opString += "_dispL";
-            for (unsigned int ix = 0; ix < 3; ++ix)
-            {
-               opString += std::to_string(displacement_.at(Side::left)[ix]);
-            }
+            opString += par().leftDisplacement;
             opString += "_dispR";
-            for (unsigned int ix = 0; ix < 3; ++ix)
-            {
-               opString += std::to_string(displacement_.at(Side::right)[ix]);
-            }
+            opString += par().rightDisplacement;
         }
         md.Operator         = opString;
         md.Nt               = nt;   
@@ -497,6 +478,9 @@ void TDistilMesonFieldFixed<FImpl,GImpl>::execute(void)
     {
         LOG(Message) << " " << g << std::endl;
     }
+    LOG(Message) << "Displacements :" << std::endl;
+    LOG(Message) << "left: "  << par().leftDisplacement  << std::endl;
+    LOG(Message) << "right: " << par().rightDisplacement << std::endl;
     LOG(Message) << "Block size : " << par().blockSize << std::endl;
     LOG(Message) << "Cache block size : " << par().cacheSize << std::endl;
 

@@ -35,6 +35,20 @@
 BEGIN_HADRONS_NAMESPACE
 BEGIN_MODULE_NAMESPACE(MDistil)
 
+inline void verifyDisplacementsInput(std::string displacement)
+{
+    
+    // check whether input is legal, i.e. a string containing only px py pz mx my mz substrings 
+    std::regex rex("((p|m)(x|y|z))*");
+    std::smatch sm;
+    std::regex_match(displacement, sm, rex);
+    if (!sm[0].matched)
+    {
+        HADRONS_ERROR(Range, "Displacements must be built from px py pz mx my mz substrings");
+    }
+
+}
+
 inline int verifyTimeSourcesInput(std::string sourceT, int nDT)
 {
     int nSourceT=0;

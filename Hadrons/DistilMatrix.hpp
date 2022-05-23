@@ -391,7 +391,7 @@ private:
                                       unsigned int                      dt,
                                       unsigned int                      iibatch,
                                       GaugeField                        U,
-                                      std::map<Side, std::vector<int>>  displacement,
+                                      std::map<Side, std::string>  displacement,
                                       std::map<Side, PerambTensor&>     peramb={});
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
@@ -399,7 +399,7 @@ private:
                                       Side                              s,
                                       std::vector<unsigned int>         dt_list,
                                       GaugeField                        U,
-                                      std::map<Side, std::vector<int>>  displacement,
+                                      std::map<Side, std::string>       displacement,
                                       std::map<Side, PerambTensor&>     peramb);
     std::vector<unsigned int> fetchDvBatchIdxs(unsigned int               ibatch,
                                                std::vector<unsigned int>  time_dil_sources,
@@ -425,7 +425,7 @@ private:
                                Side                                 s,
                                const unsigned int                   delta_t,
                                GaugeField                           U,
-                               std::map<Side, std::vector<int>>     displacement,
+                               std::map<Side, std::string>          displacement,
                                std::map<Side, PerambTensor&>        peramb);
 public:
     void executeRelative(const FilenameFn                             &filenameDmfFn,
@@ -440,7 +440,7 @@ public:
                        Side                                           relative_side,
                        std::vector<unsigned int>                      delta_t_list,
                        GaugeField                                     U,
-                       std::map<Side, std::vector<int>>               displacement,
+                       std::map<Side, std::string>                    displacement,
                        std::map<Side, PerambTensor&>                  peramb={});
     void executeFixed(const FilenameFn                               &filenameDmfFn,
                  const MetadataFn                               &metadataDmfFn,
@@ -454,7 +454,7 @@ public:
                  bool                                           only_diag,
                  const unsigned int                             diag_shift,
                  GaugeField                                     U,
-                 std::map<Side, std::vector<int>>               displacement,
+                 std::map<Side, std::string>                    displacement,
                  std::map<Side, PerambTensor&>                  peramb={});
 };
 
@@ -581,7 +581,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                unsigned int                         dt,
                                unsigned int                         iibatch,
                                GaugeField                           U,
-                               std::map<Side, std::vector<int>>     displacement,
+                               std::map<Side, std::string>          displacement,
                                std::map<Side, PerambTensor&>        peramb)
 {
     unsigned int D_offset = distilNoise_.at(s).dilutionIndex(dt,0,0);    // t is the slowest index
@@ -611,7 +611,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
             typename GImpl::GaugeLinkField Umu(U.Grid());
             Umu=peekLorentz(U,direction);
             // multiple displacements per direction possible
-            int nx = displacement.at(s)[direction];
+           /* int nx = displacement.at(s)[direction];
             for(unsigned int ix = 0; ix < std::abs(nx); ix++)
             {
                 if(displacement.at(s)[direction]>0)
@@ -627,7 +627,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                     tmp = dv.at(s)[iD] - tmp;
                     dv.at(s)[iD] = tmp;
                 }
-            }
+            }*/
         }
     }
 }
@@ -641,7 +641,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                Side                             s,
                                std::vector<unsigned int>        dt_list,
                                GaugeField                       U,
-                               std::map<Side, std::vector<int>> displacement,
+                               std::map<Side, std::string>      displacement,
                                std::map<Side, PerambTensor&>    peramb)
 {
     for(unsigned int idt=0 ; idt<dt_list.size() ; idt++)
@@ -760,7 +760,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                                Side                                     s,
                                const unsigned int                       delta_t,
                                GaugeField                               U,
-                               std::map<Side, std::vector<int>>         displacement,
+                               std::map<Side, std::string>              displacement,
                                std::map<Side, PerambTensor&>            peramb)
 {
     for(unsigned int D=0 ; D<dilSizeLS_.at(s) ; D++)
@@ -787,9 +787,10 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 FermionField tmp(U.Grid()); // from the environment??? 
                 typename GImpl::GaugeLinkField Umu(U.Grid());
                 Umu=peekLorentz(U,direction);
-                // multiple displacements per direction possible
-                int nx = displacement.at(s)[direction];
-                for(unsigned int ix = 0; ix < std::abs(nx); ix++)
+                // number of displacements = string length divided by 2 
+                // (each displacement is given by substring px py pz mx my mz)
+                int nx = displacement.at(s).length()/2;
+              /*  for(unsigned int ix = 0; ix < std::abs(nx); ix++)
                 {
                     if(displacement.at(s)[direction]>0)
                     {
@@ -804,7 +805,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                         tmp = dv.at(s)[Drelative] - tmp;
                         dv.at(s)[Drelative] = tmp;
                     }
-                }
+                }*/
             }
         }
     }
@@ -824,7 +825,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 Side                                          relative_side,
                 std::vector<unsigned int>                     delta_t_list,
                 GaugeField                                    U,
-                std::map<Side, std::vector<int>>              displacement,
+                std::map<Side, std::string>                   displacement,
                 std::map<Side, PerambTensor&>                 peramb)
 {
     const unsigned int vol = g_->_gsites;
@@ -1006,7 +1007,7 @@ void DmfComputation<FImpl,GImpl,T,Tio>
           bool                                          only_diag,
           const unsigned int                            diag_shift,
           GaugeField                                    U,
-          std::map<Side, std::vector<int>>              displacement,
+          std::map<Side, std::string>                   displacement,
           std::map<Side, PerambTensor&>                 peramb)
 {
     const unsigned int vol = g_->_gsites;
