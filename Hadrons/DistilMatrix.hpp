@@ -391,7 +391,7 @@ private:
                                       unsigned int                      dt,
                                       unsigned int                      iibatch,
                                       GaugeField                        U,
-                                      std::map<Side, std::string>  displacement,
+                                      std::map<Side, std::string>       displacement,
                                       std::map<Side, PerambTensor&>     peramb={});
     void makeDvLapSpinBatch(std::map<Side, DistilVector&>               dv,
                                       std::map<Side, unsigned int>      n_idx,
@@ -642,22 +642,15 @@ void DmfComputation<FImpl,GImpl,T,Tio>
             {
                 HADRONS_ERROR(Argument, "direction needs to be 'x' or 'y' or 'z'");
             }
-            FermionField tmp(U.Grid()); // from the environment??? 
             typename GImpl::GaugeLinkField Umu(U.Grid());
             Umu=peekLorentz(U,direction);
             if(forward)
             {
-                //this might be the wrong derivative? TODO: Put the correct one
-                tmp = GImpl::CovShiftForward( Umu,direction,dv.at(s)[iD] );
-                tmp = tmp - dv.at(s)[iD];
-                dv.at(s)[iD] = tmp;
+                dv.at(s)[iD] = GImpl::CovShiftForward( Umu,direction,dv.at(s)[iD] );
             }
             else
             {
-                //this might be the wrong derivative? TODO: Put the correct one
-                tmp = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[iD] );
-                tmp = dv.at(s)[iD] - tmp;
-                dv.at(s)[iD] = tmp;
+                dv.at(s)[iD] = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[iD] );
             }
         }
     }
@@ -850,22 +843,15 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 {
                     HADRONS_ERROR(Argument, "direction needs to be 'x' or 'y' or 'z'");
                 }
-                FermionField tmp(U.Grid()); // from the environment??? 
                 typename GImpl::GaugeLinkField Umu(U.Grid());
                 Umu=peekLorentz(U,direction);
                 if(forward)
                 {
-                    //this might be the wrong derivative? TODO: Put the correct one
-                    tmp = GImpl::CovShiftForward( Umu,direction,dv.at(s)[Drelative] );
-                    tmp = tmp - dv.at(s)[Drelative];
-                    dv.at(s)[Drelative] = tmp;
+                    dv.at(s)[Drelative] = GImpl::CovShiftForward( Umu,direction,dv.at(s)[Drelative] );
                 }
                 else
                 {
-                    //this might be the wrong derivative? TODO: Put the correct one
-                    tmp = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[Drelative] );
-                    tmp = dv.at(s)[Drelative] - tmp;
-                    dv.at(s)[Drelative] = tmp;
+                    dv.at(s)[Drelative] = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[Drelative] );
                 }
             }
         }
