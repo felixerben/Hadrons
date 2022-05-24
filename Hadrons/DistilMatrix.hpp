@@ -605,29 +605,60 @@ void DmfComputation<FImpl,GImpl,T,Tio>
             makeRhoComponent(dv.at(s)[iD] , distilNoise_.at(s) , n_idx.at(s) , D);
         }
         // loop through xyz of displacement vector
-        for(unsigned int direction = 0; direction < 3; direction++)
+        for(std::string::iterator it = displacement.at(s).begin(); it != displacement.at(s).end(); it++)
         {
+            bool forward;
+            if(*it == 'p')
+            {
+                forward=true;
+            }
+            else if(*it == 'm')
+            {
+                forward=false;
+            }
+            else
+            {
+                HADRONS_ERROR(Argument, "sign needs to be 'p' or 'm'");
+            }
+            it++;
+            if(it == displacement.at(s).end())
+            {
+                HADRONS_ERROR(Argument, "displacement string needs to be of even length");
+            }
+            int direction;
+            if(*it == 'x')
+            {
+                direction=0;
+            }
+            else if(*it == 'y')
+            {
+                direction=1;
+            }
+            else if(*it == 'z')
+            {
+                direction=2;
+            }
+            else
+            {
+                HADRONS_ERROR(Argument, "direction needs to be 'x' or 'y' or 'z'");
+            }
             FermionField tmp(U.Grid()); // from the environment??? 
             typename GImpl::GaugeLinkField Umu(U.Grid());
             Umu=peekLorentz(U,direction);
-            // multiple displacements per direction possible
-           /* int nx = displacement.at(s)[direction];
-            for(unsigned int ix = 0; ix < std::abs(nx); ix++)
+            if(forward)
             {
-                if(displacement.at(s)[direction]>0)
-                {
-                    //this might be the wrong derivative? TODO: Put the correct one
-                    tmp = GImpl::CovShiftForward( Umu,ix,dv.at(s)[iD] );
-                    tmp = tmp - dv.at(s)[iD];
-                    dv.at(s)[iD] = tmp;
-                }
-                else
-                {
-                    tmp = GImpl::CovShiftBackward( Umu,ix,dv.at(s)[iD] );
-                    tmp = dv.at(s)[iD] - tmp;
-                    dv.at(s)[iD] = tmp;
-                }
-            }*/
+                //this might be the wrong derivative? TODO: Put the correct one
+                tmp = GImpl::CovShiftForward( Umu,direction,dv.at(s)[iD] );
+                tmp = tmp - dv.at(s)[iD];
+                dv.at(s)[iD] = tmp;
+            }
+            else
+            {
+                //this might be the wrong derivative? TODO: Put the correct one
+                tmp = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[iD] );
+                tmp = dv.at(s)[iD] - tmp;
+                dv.at(s)[iD] = tmp;
+            }
         }
     }
 }
@@ -782,30 +813,60 @@ void DmfComputation<FImpl,GImpl,T,Tio>
                 makeRelativeRhoComponent(dv.at(s)[Drelative] , distilNoise_.at(s) , n_idx.at(s), D, delta_t , epack);
             }
             // loop through xyz of displacement vector
-            for(unsigned int direction = 0; direction < 3; direction++)
+            for(std::string::iterator it = displacement.at(s).begin(); it != displacement.at(s).end(); it++)
             {
+                bool forward;
+                if(*it == 'p')
+                {
+                    forward=true;
+                }
+                else if(*it == 'm')
+                {
+                    forward=false;
+                }
+                else
+                {
+                    HADRONS_ERROR(Argument, "sign needs to be 'p' or 'm'");
+                }
+                it++;
+                if(it == displacement.at(s).end())
+                {
+                    HADRONS_ERROR(Argument, "displacement string needs to be of even length");
+                }
+                int direction;
+                if(*it == 'x')
+                {
+                    direction=0;
+                }
+                else if(*it == 'y')
+                {
+                    direction=1;
+                }
+                else if(*it == 'z')
+                {
+                    direction=2;
+                }
+                else
+                {
+                    HADRONS_ERROR(Argument, "direction needs to be 'x' or 'y' or 'z'");
+                }
                 FermionField tmp(U.Grid()); // from the environment??? 
                 typename GImpl::GaugeLinkField Umu(U.Grid());
                 Umu=peekLorentz(U,direction);
-                // number of displacements = string length divided by 2 
-                // (each displacement is given by substring px py pz mx my mz)
-                int nx = displacement.at(s).length()/2;
-              /*  for(unsigned int ix = 0; ix < std::abs(nx); ix++)
+                if(forward)
                 {
-                    if(displacement.at(s)[direction]>0)
-                    {
-                        //this might be the wrong derivative? TODO: Put the correct one
-                        tmp = GImpl::CovShiftForward( Umu,ix,dv.at(s)[Drelative] );
-                        tmp = tmp - dv.at(s)[Drelative];
-                        dv.at(s)[Drelative] = tmp;
-                    }
-                    else
-                    {
-                        tmp = GImpl::CovShiftBackward( Umu,ix,dv.at(s)[Drelative] );
-                        tmp = dv.at(s)[Drelative] - tmp;
-                        dv.at(s)[Drelative] = tmp;
-                    }
-                }*/
+                    //this might be the wrong derivative? TODO: Put the correct one
+                    tmp = GImpl::CovShiftForward( Umu,direction,dv.at(s)[Drelative] );
+                    tmp = tmp - dv.at(s)[Drelative];
+                    dv.at(s)[Drelative] = tmp;
+                }
+                else
+                {
+                    //this might be the wrong derivative? TODO: Put the correct one
+                    tmp = GImpl::CovShiftBackward( Umu,direction,dv.at(s)[Drelative] );
+                    tmp = dv.at(s)[Drelative] - tmp;
+                    dv.at(s)[Drelative] = tmp;
+                }
             }
         }
     }
