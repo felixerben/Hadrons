@@ -7,6 +7,9 @@ bin_PROGRAMS = \
   HadronsContractorBenchmark \
   HadronsXmlRun              \
   HadronsXmlValidate         \
+  lscTimings         \
+  lsTuning         \
+  rhqTuning         \
   HadronsFermionEP64To32 
 
 BatchDeflationBenchmark_SOURCES = BatchDeflationBenchmark.cpp
@@ -17,6 +20,15 @@ HadronsXmlRun_LDADD   = -lHadrons -lGrid
 
 HadronsXmlValidate_SOURCES = HadronsXmlValidate.cpp
 HadronsXmlValidate_LDADD   = -lHadrons -lGrid
+
+lscTimings_SOURCES = lscTimings.cpp
+lscTimings_LDADD   = -lHadrons -lGrid
+
+lsTuning_SOURCES = lsTuning.cpp
+lsTuning_LDADD   = -lHadrons -lGrid
+
+rhqTuning_SOURCES = rhqTuning.cpp
+rhqTuning_LDADD   = -lHadrons -lGrid
 
 HadronsFermionEP64To32_SOURCES  = EigenPackCast.cpp
 HadronsFermionEP64To32_CXXFLAGS = $(AM_CXXFLAGS) -DFIN=WilsonImplD::FermionField -DFOUT=WilsonImplF::FermionField

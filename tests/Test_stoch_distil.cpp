@@ -92,7 +92,8 @@ int main(int argc, char *argv[])
     std::vector<double>      mass    = {.01, .04};
     std::vector<std::string> noises  = {"noiseTdil2", "noiseTfull"};
     std::vector<int>         nNoises = {3, 5}; 
-    std::vector<std::string> tSrcs   = {"", "0 4"}; 
+    //std::vector<std::string> tSrcs   = {"", "0 4"}; 
+    std::vector<std::string> tSrcs   = {"", ""}; 
     
     // global parameters
     Application::GlobalPar globalPar;
@@ -176,6 +177,7 @@ int main(int argc, char *argv[])
             perambPar.perambFileName = "./kpi-stoch/Peramb_" + flavour[i] + "_" + noises[j];
             perambPar.fullSolveFileName = "./kpi-stoch/unsmeared_solve_" + flavour[i] + "_" + noises[j]; // only used for perambMode::saveSolve
             perambPar.fullSolve = ""; // only used for perambMode::loadSolve
+            perambPar.sourceBatchSize = 1; // batch deflation
             perambPar.distilNoise = noises[j];
             perambPar.timeSources = tSrcs[j]; // time slices to invert on
             perambPar.perambMode = MDistil::pMode::saveSolve; // compute perambulator from lap evecs, save unsmeared solves to disk

@@ -132,6 +132,7 @@ int main(int argc, char *argv[])
         perambPar.perambFileName = "./Peramb_" + flavour[i] + "_nvec6";
         perambPar.fullSolveFileName = ""; // only used for perambMode::saveSolve
         perambPar.fullSolve = ""; // only used for perambMode::loadSolve
+        perambPar.sourceBatchSize = 1; // batch deflation
         perambPar.distilNoise = "exact";
         perambPar.timeSources = ""; // empty -> invert on all time slices
         perambPar.perambMode = MDistil::pMode::perambOnly; // compute perambulator from lap evecs, discard unsmeared solves
