@@ -111,6 +111,7 @@ void TWriteCorrelatorGroup<FImpl1, FImpl2>::setup(void)
 template <typename FImpl1, typename FImpl2>
 void TWriteCorrelatorGroup<FImpl1, FImpl2>::execute(void)
 {
+    LOG(Message) << "Writing collated results into file '" << par().output << "'..." << std::endl;
     auto &contractionList = par().contractions; // Switch to std::vector with <elem></elem> tags
 
     HadronsSerializableGroup result(contractionList.size());
@@ -118,11 +119,13 @@ void TWriteCorrelatorGroup<FImpl1, FImpl2>::execute(void)
     {
         auto &moduleResults = envGet(HadronsSerializable, contractionModuleName);
         result.append(contractionModuleName, moduleResults);
+        LOG(Message) << "Wrote group '" << contractionModuleName << "'." << std::endl;
     }
 
     // Pass a blank string to dump the unpacked group the file, rather than
     // adding a forced and useless outer group around the result
     saveResult(par().output, "", result);
+    LOG(Message) << "Finshed writing collated results into file '" << par().output << "'." << std::endl;
 }
 
 END_MODULE_NAMESPACE

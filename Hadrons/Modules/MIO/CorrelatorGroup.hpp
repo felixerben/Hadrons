@@ -110,6 +110,7 @@ void TCorrelatorGroup<Impl>::setup(void)
 template<typename Impl>
 void TCorrelatorGroup<Impl>::execute(void)
 {
+    LOG(Message) << "Starting result collation into Result Group '" << getName() << "'..." << std::endl;
     auto &contractionList = par().contractions;
     auto &out             = envGet(HadronsSerializable, getName());
     auto &result          = out.template hold<HadronsSerializableGroup>(contractionList.size());
@@ -118,7 +119,9 @@ void TCorrelatorGroup<Impl>::execute(void)
     {
         auto &moduleResults = envGet(HadronsSerializable, contractionModuleName);
         result.append(contractionModuleName, moduleResults);
+        LOG(Message) << "Bundled '" << contractionModuleName << "' into Result Group '" << getName() << "'." << std::endl;
     }
+    LOG(Message) << "Finished collating results into Result Group '" << getName() << "'." << std::endl;
 }
 
 END_MODULE_NAMESPACE
