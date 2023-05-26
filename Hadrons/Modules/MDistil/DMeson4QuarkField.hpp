@@ -159,6 +159,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     TimerArray timer;
     ContractionDistilMesonField<ComplexD,ComplexF> DMeson(mfPath,env().getDim(Tdir), timer);
     
+    
+    
     auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol1);
     int nNoise = dilNoise.size(); 
     if(nNoise>1)
@@ -184,6 +186,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         HADRONS_ERROR(Range, "tKpi must be smaller than nT");
     }
     
+    
+    
     Complex           i(0.0,1.0);
     std::vector<Real> p;
     p  = strToVec<Real>(par().mom);
@@ -198,7 +202,13 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     }
     ph = exp((Real)(2*M_PI)*i*ph);
 
-    
+    std::string outPath = par().outPath; 
+    std::stringstream ss;
+    ss << par().gamma12 << "_" << par().gamma34 << "_p";
+    for (unsigned int mu = 0; mu < p.size(); ++mu)
+            ss << p[mu] << ((mu == p.size() - 1) ? "" : "_");
+    ss << ".h5";   
+    outPath += "/D-Hw.tD" + std::to_string(tD) +".tKpi"+ std::to_string(tKpi) + "/" + ss.str();
     
     envGetTmp(FermionField, fermion4dtmp1);
     envGetTmp(FermionField, fermion3dtmp1);
@@ -218,9 +228,38 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     Gamma                  g12(par().gamma12);
     Gamma                  g34(par().gamma34);
     
+    
+    std::array<unsigned int, 3> index1,index2;
+    
+    DistilMesonFieldMetadata<FImpl> md;
+    for (auto pmu: p)
+    {
+        md.Momentum.push_back(pmu);
+     }
+    // metadata would ideally allow any string here so we could specify this correctly
+    //md.Operator          = g34.g;
+    md.Nt                = nT;   
+    md.Nvec              = nDL;     //nvec=nDL for exact
+    md.NoisePair         = {0,0};
+    md.MesonFieldType    = "MD-Hw";
+    md.RelativeSide      = "none";
+    md.NoiseHashLeft     = "0";
+    md.NoiseHashRight    = "0";
+    //md.TimeDilutionLeft  = dilNoise.getMap();//[Index::t];
+    //md.TimeDilutionRight = dilNoise.getMap();//[Index::t];
+    //md.LapDilutionLeft   = index1[DistillationNoise<FImpl>::Index::l];
+    //md.LapDilutionRight  = index1[DistillationNoise<FImpl>::Index::l];
+    //md.SpinDilutionLeft  = index1[DistillationNoise<FImpl>::Index::s];
+    //md.SpinDilutionRight = index1[DistillationNoise<FImpl>::Index::s];
+    
+    DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
+    matrix_io.initFile(md);
+    
+    
+    
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     int T1,T2,dk1,ds1,dk2,ds2,dSolve1,dSolve2,tH;
-    std::array<unsigned int, 3> index1,index2;
+    
     for (int t = 0; t < Ntlocal; t++ )
     {
         tH = t + Ntfirst;
@@ -292,9 +331,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 block(0,0,id1,id2) = cache(0,0,0,0,0);
                           
                 LOG(Message) << "4q-Meson Field " << tKpi << ", " << tKpi << " at t= " << tH << ": " << id1 << " " << id2 << " is " <<  block(0,0,id1,id2) << std::endl;
-                // NOW save that as block "tH"/"tKpi"-"tKpi"
+                
             }
         }
+        LOG(Message) << "Starting parallel IO for tH = " << tH << std::endl;
+        DistilMatrixSetTimeSliceIo<ComplexF> block_relative(block_buf.data(), 1, nDL * nDS, nDL * nDS);
+        std::string dataset_name = std::to_string(tKpi)+"-"+std::to_string(tKpi);
+        gridHD->Barrier();
+        matrix_io.saveBlock(block_relative, 0, 0, 0, dataset_name, tH, 1);
+        gridHD->Barrier();
     }
     
 }
