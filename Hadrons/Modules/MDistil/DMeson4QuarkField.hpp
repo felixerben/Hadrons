@@ -111,27 +111,22 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     GridCartesian * gridHD = envGetGrid(FermionField);
     GridCartesian * gridLD = envGetSliceGrid(FermionField,gridHD->Nd() -1);
     
-    envTmp(FermionField, "fermion3dtmp1",1,gridLD);
-    envTmp(FermionField, "fermion3dtmp2",1,gridLD);
-    envTmp(FermionField, "fermion3dtmp3",1,gridLD);
-    envTmp(PropagatorField, "prop3dtmp",1,gridLD);
-    envTmp(ComplexField, "MPhiPhi",1,gridLD);
+    envTmpLat(FermionField,    "fermion4dtmp");
+    envTmp   (FermionField,    "fermion3dtmp1" ,1, gridLD);
+    envTmp   (FermionField,    "fermion3dtmp2" ,1, gridLD);
+    envTmp   (FermionField,    "fermion3dtmp3" ,1, gridLD);
+    envTmp   (PropagatorField, "prop3dtmp"     ,1, gridLD);
+    envTmp   (ComplexField,    "MPhiPhi"       ,1, gridLD);
+    envTmp   (ComplexField,    "cplx3dtmp"     ,1, gridLD);
+    envTmpLat(ComplexField,    "ph");
+    envTmp   (ComplexField,    "ph3d"          ,1, gridLD);
+    envTmpLat(ComplexField,    "coor");
 
-    // the 4 Distillation vectors in the 4-quark field
-    envTmpLat(FermionField, "fermion4dtmp1");
-    envTmpLat(FermionField, "fermion4dtmp2");
-    envTmpLat(PropagatorField, "prop4dtmp");
-    envTmpLat(FermionField, "fermion4dtmp3");
-    envTmpLat(FermionField, "fermion4dtmp4");
-    
-    envTmp(ComplexField, "cplx3dtmp",1,gridLD);
-    envTmpLat(LatticeComplex, "ph");
-    envTmp(LatticeComplex, "phTH",1,gridLD);
-    envTmpLat(LatticeComplex, "coor");
-
-    
-    envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, 24*24);
-    envTmp(Vector<HADRONS_DISTIL_TYPE>,    "cache_buf", 1,24*24);
+    auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol1);
+    int nDL = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::l);        
+    int nDS = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::s);     
+    envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, nDL * nDS * nDL * nDS);
+    envTmp(Vector<HADRONS_DISTIL_TYPE>,    "cache_buf", 1, nDL * nDS * nDL * nDS);
     
 }
 
@@ -190,9 +185,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     Complex           i(0.0,1.0);
     std::vector<Real> p;
     p  = strToVec<Real>(par().mom);
-    envGetTmp(LatticeComplex, coor);
-    envGetTmp(LatticeComplex, ph);
-    envGetTmp(LatticeComplex, phTH);
+    envGetTmp(ComplexField, coor);
+    envGetTmp(ComplexField, ph);
+    envGetTmp(ComplexField, ph3d);
     ph = Zero();
     for(unsigned int mu = 0; mu < env().getNd(); mu++)
     {
@@ -212,17 +207,13 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     outPath += "/D-Hw.tD" + std::to_string(tD) +".tKpi"+ std::to_string(tKpi) + "/" + ss.str();
     
     // Temporary objects
-    envGetTmp(FermionField, fermion4dtmp1);
-    envGetTmp(FermionField, fermion3dtmp1);
-    envGetTmp(FermionField, fermion3dtmp2);
-    envGetTmp(FermionField, fermion3dtmp3);
-    envGetTmp(FermionField, fermion4dtmp2);
-    envGetTmp(FermionField, fermion4dtmp3);
-    envGetTmp(FermionField, fermion4dtmp4);
-    envGetTmp(PropagatorField, prop4dtmp);
+    envGetTmp(FermionField,    fermion4dtmp);
+    envGetTmp(FermionField,    fermion3dtmp1);
+    envGetTmp(FermionField,    fermion3dtmp2);
+    envGetTmp(FermionField,    fermion3dtmp3);
     envGetTmp(PropagatorField, prop3dtmp);
-    envGetTmp(ComplexField, MPhiPhi);
-    envGetTmp(ComplexField, cplx3dtmp);
+    envGetTmp(ComplexField,    MPhiPhi);
+    envGetTmp(ComplexField,    cplx3dtmp);
     
     // initialise file and metadata
     DistilMesonFieldMetadata<FImpl> md;
@@ -263,7 +254,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         tH = t + Ntfirst;
         MPhiPhi=Zero();    
         // 3D phase e^{ipx}
-        ExtractSliceLocal(phTH,ph,0,t,Tdir);  
+        ExtractSliceLocal(ph3d,ph,0,t,Tdir);  
         for(int id1=0; id1<nDL * nDS; id1++)
         {
             // this line is where the ordering s + ns*(l + nl*t) is assumed
@@ -273,9 +264,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem1);
             // full dilution assumed here, and that solve 1 comes from timeslice tD = d_{tD}
             dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tD;
-            fermion4dtmp1 = solve1[dSolve1];
+            fermion4dtmp = solve1[dSolve1];
             // this is vector 1 on timeslice tH 
-            ExtractSliceLocal(fermion3dtmp1,fermion4dtmp1,0,t,Tdir);
+            ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
             {
                 index2 = dilNoise.dilutionCoordinates(id2);  
@@ -284,9 +275,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem2);
                 // full dilution assumed here, and that solve 2 comes from timeslice tD = d_{tD}
                 dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tD; 
-                fermion4dtmp2 = solve2[dSolve2];
+                fermion4dtmp = solve2[dSolve2];
                 // this is vector 2 on timeslice tH 
-                ExtractSliceLocal(fermion3dtmp2,fermion4dtmp2,0,t,Tdir);
+                ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g12*fermion3dtmp2;
                 fermion3dtmp2 = DMeson(tD,tD,tD)(id1,id2)*fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
@@ -304,8 +295,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem3);
             // full dilution assumed here, and that solve 3 comes from timeslice tKpi = d_{tKpi}
             dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tKpi; 
-            fermion4dtmp1 = solve1[dSolve1];
-            ExtractSliceLocal(fermion3dtmp1,fermion4dtmp1,0,t,Tdir);
+            fermion4dtmp = solve1[dSolve1];
+            ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
             {
                 // no caching for the moment - but keep this here in case anyone wants to optimise this code at some stage
@@ -316,20 +307,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem4);
                 // full dilution assumed here, and that solve 4 comes from timeslice tKpi = d_{tKpi}
                 dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tKpi; 
-                fermion4dtmp2 = solve2[dSolve2];
-                ExtractSliceLocal(fermion3dtmp2,fermion4dtmp2,0,t,Tdir);
-                fermion3dtmp3 = g34*fermion3dtmp2;
-                
+                fermion4dtmp = solve2[dSolve2];
+                ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
+                fermion3dtmp3 = g34*fermion3dtmp2;          
                 fermion3dtmp2 = fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
-                cplx3dtmp = trace(prop3dtmp)*MPhiPhi*phTH;
-                sliceSum(cplx3dtmp,buf,Tdir);
-                
+                cplx3dtmp = trace(prop3dtmp)*MPhiPhi*ph3d;
+                sliceSum(cplx3dtmp,buf,Tdir);                
                 cache(0,0,0,0,0)=TensorRemove(buf[0]);
-                block(0,0,id1,id2) = cache(0,0,0,0,0);
-                          
-                LOG(Message) << "4q-Meson Field " << tKpi << ", " << tKpi << " at t= " << tH << ": " << id1 << " " << id2 << " is " <<  block(0,0,id1,id2) << std::endl;
-                
+                block(0,0,id1,id2) = cache(0,0,0,0,0);                
             }
         }
         LOG(Message) << "Starting parallel IO for tH = " << tH << std::endl;
