@@ -51,7 +51,9 @@ public:
                                     std::vector<std::string>,   noisePairs,    // specifying which noise pairs to contract over - assert that they are in M(rho,rho) and compatible with v1,v2
                                     unsigned int,               tD,            // time of D meson
                                     unsigned int,               tKpi,          // time of yet uncontracted part
-                                    std::string,                gamma,         // in Hw, we could hard-code this
+                                    Gamma::Algebra,             gamma12,         // between vector1 and vector2
+                                    Gamma::Algebra,             gamma34,         // between vector3 and vector4
+                                    std::string,                mom,           // momentum injected into Hw
                                     unsigned int,               blockSize,     // tunable parameters
                                     unsigned int,               cacheSize);
 };
@@ -123,6 +125,9 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     envTmpLat(FermionField, "fermion4dtmp4");
     
     envTmp(ComplexField, "cplx3dtmp",1,gridLD);
+    envTmpLat(LatticeComplex, "ph");
+    envTmp(LatticeComplex, "phTH",1,gridLD);
+    envTmpLat(LatticeComplex, "coor");
 
     
     envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, 24*24);
@@ -179,6 +184,22 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         HADRONS_ERROR(Range, "tKpi must be smaller than nT");
     }
     
+    Complex           i(0.0,1.0);
+    std::vector<Real> p;
+    p  = strToVec<Real>(par().mom);
+    envGetTmp(LatticeComplex, coor);
+    envGetTmp(LatticeComplex, ph);
+    envGetTmp(LatticeComplex, phTH);
+    ph = Zero();
+    for(unsigned int mu = 0; mu < env().getNd(); mu++)
+    {
+        LatticeCoordinate(coor, mu);
+        ph = ph + (p[mu]/env().getDim(mu))*coor;
+    }
+    ph = exp((Real)(2*M_PI)*i*ph);
+
+    
+    
     envGetTmp(FermionField, fermion4dtmp1);
     envGetTmp(FermionField, fermion3dtmp1);
     envGetTmp(FermionField, fermion3dtmp2);
@@ -194,16 +215,18 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     std::vector<TComplex>  buf;
     
     
-    Gamma                  gX(Gamma::Algebra::GammaX);
+    Gamma                  g12(par().gamma12);
+    Gamma                  g34(par().gamma34);
     
-    // TD must constttttttt.... input param!!
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     int T1,T2,dk1,ds1,dk2,ds2,dSolve1,dSolve2,tH;
     std::array<unsigned int, 3> index1,index2;
     for (int t = 0; t < Ntlocal; t++ )
     {
         tH = t + Ntfirst;
-        MPhiPhi=Zero();      
+        MPhiPhi=Zero();    
+        // 3D phase e^{ipx}
+        ExtractSliceLocal(phTH,ph,0,t,Tdir);  
         for(int id1=0; id1<nDL * nDS; id1++)
         {
             // this line is where the ordering s + ns*(l + nl*t) is assumed
@@ -211,7 +234,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
             ds1 = index1[DistillationNoise<FImpl>::Index::s];
             auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem1);
-            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tD; // tD because source otiginating from there & full dilution is used -- meaning tD is equal to its dilution index
+            // full dilution assumed here, and that solve 1 comes from timeslice tD = d_{tD}
+            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tD;
             fermion4dtmp1 = solve1[dSolve1];
             // this is vector 1 on timeslice tH 
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp1,0,t,Tdir);
@@ -221,14 +245,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
                 auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem2);
-                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tD; // tD because source otiginating from there & full dilution is used
+                // full dilution assumed here, and that solve 2 comes from timeslice tD = d_{tD}
+                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tD; 
                 fermion4dtmp2 = solve2[dSolve2];
+                // this is vector 2 on timeslice tH 
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp2,0,t,Tdir);
-                fermion3dtmp3 = gX*fermion3dtmp2;
-                //LOG(Message) << "Meson Field " << tD << ", " << tD << " at t= " << tD << ": " << id1 << " " << id2 << " is " <<  DMeson(tD,tD,tD)(id1,id2) << std::endl;
+                fermion3dtmp3 = g12*fermion3dtmp2;
                 fermion3dtmp2 = DMeson(tD,tD,tD)(id1,id2)*fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
-                //prop4dtmp = outerProduct(fermion4dtmp1,fermion4dtmp2);
+                // this object is sum_{spin,colour,d1,d2} (DMeson[d1,d2] * vector1[d1] * gamma12 * vector2[d2]) on timeslice tH
                 MPhiPhi += trace(prop3dtmp);
             }
         }
@@ -240,31 +265,32 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
             ds1 = index1[DistillationNoise<FImpl>::Index::s];
             auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem3);
-            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tKpi; // tKpi because source otiginating from there & full dilution is used -- meaning tKpi is equal to its dilution index
+            // full dilution assumed here, and that solve 3 comes from timeslice tKpi = d_{tKpi}
+            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tKpi; 
             fermion4dtmp1 = solve1[dSolve1];
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp1,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
             {
+                // no caching for the moment - but keep this here in case anyone wants to optimise this code at some stage
                 DistilMatrixSetCache<ComplexD> cache(cache_buf.data(), 1, 1, 1, 1, 1);
                 index2 = dilNoise.dilutionCoordinates(id2);  
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
                 auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem4);
-                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tKpi; // tKpi because source otiginating from there & full dilution is used -- meaning tKpi is equal to its dilution index
+                // full dilution assumed here, and that solve 4 comes from timeslice tKpi = d_{tKpi}
+                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tKpi; 
                 fermion4dtmp2 = solve2[dSolve2];
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp2,0,t,Tdir);
-                fermion3dtmp3 = gX*fermion3dtmp2;
+                fermion3dtmp3 = g34*fermion3dtmp2;
                 
                 fermion3dtmp2 = fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
-                cplx3dtmp = trace(prop3dtmp)*MPhiPhi;
-                // MAYBE MULTIPLY BY PHASE HERE!!
+                cplx3dtmp = trace(prop3dtmp)*MPhiPhi*phTH;
                 sliceSum(cplx3dtmp,buf,Tdir);
                 
                 cache(0,0,0,0,0)=TensorRemove(buf[0]);
                 block(0,0,id1,id2) = cache(0,0,0,0,0);
-                
-                
+                          
                 LOG(Message) << "4q-Meson Field " << tKpi << ", " << tKpi << " at t= " << tH << ": " << id1 << " " << id2 << " is " <<  block(0,0,id1,id2) << std::endl;
                 // NOW save that as block "tH"/"tKpi"-"tKpi"
             }
