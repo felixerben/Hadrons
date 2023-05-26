@@ -139,42 +139,41 @@ void TDMeson4QuarkField<FImpl>::setup(void)
 template <typename FImpl>
 void TDMeson4QuarkField<FImpl>::execute(void)
 {
-
-    std::map<std::string, DistilMesonFieldMatrix<ComplexD>> mf_out; 
-    DistilMesonFieldMatrix<ComplexD> mf_tmp;
-    
+    // general grid setup
     GridCartesian * gridHD = envGetGrid(FermionField);
     GridCartesian * gridLD = envGetSliceGrid(FermionField,gridHD->Nd() -1);
     const int Ntlocal{gridHD->LocalDimensions()[Tdir]};
     const int Ntfirst{gridHD->LocalStarts()[Tdir]};
+    int nT=env().getDim(Tdir);
     
+    // block and cache to store the output in
     envGetTmp(Vector<HADRONS_DISTIL_IO_TYPE>, block_buf);
     envGetTmp(Vector<HADRONS_DISTIL_TYPE>, cache_buf);
     
-    LOG(Message) << "blocc " << block_buf[0] << std::endl;
-    LOG(Message) << "cacc " << cache_buf[0] << std::endl;
-
+    // read input D-meson field
     std::string mfPath = par().DMesonField;   
     LOG(Message) << "reading " << mfPath << std::endl;
     TimerArray timer;
     ContractionDistilMesonField<ComplexD,ComplexF> DMeson(mfPath,env().getDim(Tdir), timer);
-    
-    
-    
+     
+    // noise class -- assert they are identical and an "exact distillation" policy
     auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol1);
+    auto &dN2 = envGet(DistillationNoise<FImpl>, par().noisePol2);
+    auto &dN3 = envGet(DistillationNoise<FImpl>, par().noisePol3);
+    auto &dN4 = envGet(DistillationNoise<FImpl>, par().noisePol4);
+    if(dN2.generateHash() != dilNoise.generateHash() || dN3.generateHash() != dilNoise.generateHash()|| dN4.generateHash() != dilNoise.generateHash())
+    {
+        HADRONS_ERROR(Implementation, "All noise policies must be identical");
+    }
     int nNoise = dilNoise.size(); 
     if(nNoise>1)
     {
-        HADRONS_ERROR(Range, "DMeson4QuarkField only implemented for exact distillation");
+        HADRONS_ERROR(Implementation, "DMeson4QuarkField only implemented for exact distillation");
     }
-    const int iNoise=0;
     int nDL = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::l);        
     int nDS = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::s);        
     int nDT = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::t);        
-    int nD = nDL * nDS * nDT;
-    
-    int nT=env().getDim(Tdir);
-    
+    // other input parameters
     int tD = par().tD; 
     int tKpi = par().tKpi; 
     if(tD>=nT)
@@ -185,9 +184,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     {
         HADRONS_ERROR(Range, "tKpi must be smaller than nT");
     }
-    
-    
-    
+    Gamma                  g12(par().gamma12);
+    Gamma                  g34(par().gamma34);
+    // momentum phase e^{ipx} for Hw
     Complex           i(0.0,1.0);
     std::vector<Real> p;
     p  = strToVec<Real>(par().mom);
@@ -202,6 +201,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     }
     ph = exp((Real)(2*M_PI)*i*ph);
 
+    // file name of output
+    // TODO: This breaks if folder structure not there yet 
     std::string outPath = par().outPath; 
     std::stringstream ss;
     ss << par().gamma12 << "_" << par().gamma34 << "_p";
@@ -210,6 +211,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     ss << ".h5";   
     outPath += "/D-Hw.tD" + std::to_string(tD) +".tKpi"+ std::to_string(tKpi) + "/" + ss.str();
     
+    // Temporary objects
     envGetTmp(FermionField, fermion4dtmp1);
     envGetTmp(FermionField, fermion3dtmp1);
     envGetTmp(FermionField, fermion3dtmp2);
@@ -222,15 +224,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     envGetTmp(ComplexField, MPhiPhi);
     envGetTmp(ComplexField, cplx3dtmp);
     
-    std::vector<TComplex>  buf;
-    
-    
-    Gamma                  g12(par().gamma12);
-    Gamma                  g34(par().gamma34);
-    
-    
-    std::array<unsigned int, 3> index1,index2;
-    
+    // initialise file and metadata
     DistilMesonFieldMetadata<FImpl> md;
     for (auto pmu: p)
     {
@@ -254,12 +248,16 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     
     DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
     matrix_io.initFile(md);
-    
-    
+
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
+    // variables used in the loop structure
     int T1,T2,dk1,ds1,dk2,ds2,dSolve1,dSolve2,tH;
+    std::array<unsigned int, 3> index1,index2;
+    std::vector<TComplex>  buf;
     
+    
+    // loop over tH
     for (int t = 0; t < Ntlocal; t++ )
     {
         tH = t + Ntfirst;
@@ -338,7 +336,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         DistilMatrixSetTimeSliceIo<ComplexF> block_relative(block_buf.data(), 1, nDL * nDS, nDL * nDS);
         std::string dataset_name = std::to_string(tKpi)+"-"+std::to_string(tKpi);
         gridHD->Barrier();
-        matrix_io.saveBlock(block_relative, 0, 0, 0, dataset_name, tH, 1);
+        matrix_io.saveBlock(block_relative, 0, 0, 0, dataset_name, 0, nDL * nDS, std::to_string(tH));
         gridHD->Barrier();
     }
     
