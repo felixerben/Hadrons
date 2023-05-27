@@ -1,3 +1,7 @@
+#ifndef Hadrons_MDistil_Base_hpp_
+#define Hadrons_MDistil_Base_hpp_
+
+
 #include <Hadrons/Global.hpp>
 #include <Hadrons/A2AMatrix.hpp>
 #include <Hadrons/DiskVector.hpp>
@@ -6,6 +10,8 @@
 #include "Utils.hpp"
 
 #define BASEGROUP "DistilMesonField"
+
+
 
 using namespace Grid;
 using namespace Hadrons;
@@ -81,4 +87,4 @@ void ContractionDistilMesonField<T,Tio>::load(void)
 }
 
 
-
+#endif

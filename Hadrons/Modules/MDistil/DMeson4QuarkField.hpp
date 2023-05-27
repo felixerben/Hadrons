@@ -243,7 +243,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     // variables used in the loop structure
-    int T1,T2,dk1,ds1,dk2,ds2,dSolve1,dSolve2,tH;
+    int dk1,ds1,dk2,ds2,dSolve1,dSolve2,tH;
     std::array<unsigned int, 3> index1,index2;
     std::vector<TComplex>  buf;
     
