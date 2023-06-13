@@ -238,6 +238,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     //md.SpinDilutionRight = index1[DistillationNoise<FImpl>::Index::s];
    
 
+    makeFileDir(outPath, gridHD);
     unsigned int myRank = gridHD->ThisRank(); 
     DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
     if(myRank==0)
