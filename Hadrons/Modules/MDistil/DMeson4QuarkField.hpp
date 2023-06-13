@@ -253,7 +253,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     std::array<unsigned int, 3> index1,index2;
     std::vector<TComplex>  buf;
     
-    
+    const uint i_rank =  gridHD->ThisRank();
+    const uint N_ranks = gridHD->RankCount();   
+ 
     // loop over tH
     for (int t = 0; t < Ntlocal; t++ )
     {
@@ -324,11 +326,20 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 block(0,0,id1,id2) = cache(0,0,0,0,0);                
             }
         }
-        LOG(Message) << "Starting parallel IO for tH = " << tH << std::endl;
+        LOG(Message) << "Starting serial IO for tH = " << tH << std::endl;
         DistilMatrixSetTimeSliceIo<ComplexF> block_relative(block_buf.data(), 1, nDL * nDS, nDL * nDS);
         std::string dataset_name = std::to_string(tKpi)+"-"+std::to_string(tKpi);
         gridHD->Barrier();
-        matrix_io.saveBlock(block_relative, 0, 0, 0, dataset_name, 0, nDL * nDS, std::to_string(tH));
+        for(int iIO=0; iIO<N_ranks; iIO++)
+        {
+            gridHD->Barrier();
+            if(iIO==i_rank)
+            {
+                LOG(Message) << "Writing from rank " << i_rank << std::endl;
+                matrix_io.saveBlock(block_relative, 0, 0, 0, dataset_name, 0, nDL * nDS, std::to_string(tH));
+            }
+            gridHD->Barrier();
+        }
         gridHD->Barrier();
     }
     
