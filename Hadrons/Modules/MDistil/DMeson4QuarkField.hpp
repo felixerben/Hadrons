@@ -236,10 +236,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     //md.LapDilutionRight  = index1[DistillationNoise<FImpl>::Index::l];
     //md.SpinDilutionLeft  = index1[DistillationNoise<FImpl>::Index::s];
     //md.SpinDilutionRight = index1[DistillationNoise<FImpl>::Index::s];
-    
-    DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
-    matrix_io.initFile(md);
+   
 
+    unsigned int myRank = gridHD->ThisRank(); 
+    DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
+    if(myRank==0)
+    {
+        matrix_io.initFile(md);
+    }
+    gridHD->Barrier();
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     // variables used in the loop structure
