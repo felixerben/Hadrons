@@ -63,6 +63,14 @@ class TDMeson4QuarkField: public Module<DMeson4QuarkFieldPar>
 {
 public:
     FERM_TYPE_ALIASES(FImpl,);
+    class Result: Serializable
+    {
+    public:
+        GRID_SERIALIZABLE_CLASS_MEMBERS(Result,
+                                        Gamma::Algebra, gamma_snk,
+                                        Gamma::Algebra, gamma_src,
+                                        std::vector<Complex>, corr);
+    };
     // constructor
     TDMeson4QuarkField(const std::string name);
     // destructor
@@ -117,6 +125,7 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     envTmp   (FermionField,    "fermion3dtmp3" ,1, gridLD);
     envTmp   (PropagatorField, "prop3dtmp"     ,1, gridLD);
     envTmp   (ComplexField,    "MPhiPhi"       ,1, gridLD);
+    envTmpLat(ComplexField,    "MPhiPhiTest");
     envTmp   (ComplexField,    "cplx3dtmp"     ,1, gridLD);
     envTmpLat(ComplexField,    "ph");
     envTmp   (ComplexField,    "ph3d"          ,1, gridLD);
@@ -213,6 +222,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     envGetTmp(FermionField,    fermion3dtmp3);
     envGetTmp(PropagatorField, prop3dtmp);
     envGetTmp(ComplexField,    MPhiPhi);
+    envGetTmp(ComplexField,    MPhiPhiTest);
     envGetTmp(ComplexField,    cplx3dtmp);
     
     // initialise file and metadata
@@ -293,6 +303,14 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 MPhiPhi += trace(prop3dtmp);
             }
         }
+        /*************************************************
+        FE: checked here that a sliceSum over MPhiPhi
+        reproduces exactly a contraction of meson fields
+        tr[ M(rho,rho; tD,tD,tD) * M(phi,phi; tD,tD,tD) ]
+        *************************************************/
+        // TEST CODE TO CHECK SUM OVER M-PHI-PHI
+        InsertSliceLocal(MPhiPhi,MPhiPhiTest,0,t,Tdir);
+        // END TEST CODE
         DistilMatrixSetIo<ComplexF> block(block_buf.data(), 1 , 1, nDL * nDS, nDL * nDS);
         for(int id1=0; id1<nDL * nDS; id1++)
         {
@@ -332,7 +350,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         gridHD->Barrier();
         for(int iIO=0; iIO<N_ranks; iIO++)
         {
-            gridHD->Barrier();
+            //gridHD->Barrier();
             if(iIO==i_rank)
             {
                 LOG(Message) << "Writing from rank " << i_rank << std::endl;
@@ -340,9 +358,19 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             }
             gridHD->Barrier();
         }
-        gridHD->Barrier();
+        //gridHD->Barrier();
     }
     
+    // TEST CODE
+    std::vector<TComplex>  buf2;
+    Result  result;
+    result.corr.resize(nT);
+    sliceSum(MPhiPhiTest, buf2, Tdir);
+    for (unsigned int t = 0; t < nT; ++t)
+    {
+        result.corr[t] = TensorRemove(buf2[t]);
+    }
+    saveResult("./MPhiPhiTest","v1v2",result);
 }
 
 END_MODULE_NAMESPACE
