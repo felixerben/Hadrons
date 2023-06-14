@@ -373,7 +373,10 @@ void TDistilMesonFieldFixed<FImpl>::execute(void)
         {
             md.Momentum.push_back(pmu);
         }
-        md.Operator         = gamma_[o];
+        std::stringstream ss;
+        ss << gamma_[o];
+        std::string opString = ss.str();
+        md.Operator         = opString;
         md.Nt               = nt;   
         md.Nvec             = nVec;     //nvec is the same for both sides
         md.NoisePair        = {nl,nr};

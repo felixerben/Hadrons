@@ -23,7 +23,7 @@ BEGIN_HADRONS_NAMESPACE
  *          \____/          \___                                                *
  *                                                                              *
  *                                                                              *
- *  D(t=0)           H_W(t=deltaT)                                              *
+ *  D(t=tD)           H_W(t)       tKpi                                         *
  *                                                                              *
  *                                                                              *
  *******************************************************************************/
@@ -205,7 +205,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     ph = exp((Real)(2*M_PI)*i*ph);
 
     // file name of output
-    // TODO: This breaks if folder structure not there yet 
     std::string outPath = par().outPath; 
     std::stringstream ss;
     ss << par().gamma12 << "_" << par().gamma34 << "_p";
@@ -230,7 +229,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         md.Momentum.push_back(pmu);
      }
     // metadata would ideally allow any string here so we could specify this correctly
-    //md.Operator          = g34.g;
+    std::stringstream ss2;
+    ss2 << par().gamma12 << "_" << par().gamma34;
+    md.Operator          = ss2.str();
     md.Nt                = nT;   
     md.Nvec              = nDL;     //nvec=nDL for exact
     md.NoisePair         = {0,0};
