@@ -125,7 +125,6 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     envTmp   (FermionField,    "fermion3dtmp3" ,1, gridLD);
     envTmp   (PropagatorField, "prop3dtmp"     ,1, gridLD);
     envTmp   (ComplexField,    "MPhiPhi"       ,1, gridLD);
-    envTmpLat(ComplexField,    "MPhiPhiTest");
     envTmp   (ComplexField,    "cplx3dtmp"     ,1, gridLD);
     envTmpLat(ComplexField,    "ph");
     envTmp   (ComplexField,    "ph3d"          ,1, gridLD);
@@ -222,7 +221,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     envGetTmp(FermionField,    fermion3dtmp3);
     envGetTmp(PropagatorField, prop3dtmp);
     envGetTmp(ComplexField,    MPhiPhi);
-    envGetTmp(ComplexField,    MPhiPhiTest);
     envGetTmp(ComplexField,    cplx3dtmp);
     
     // initialise file and metadata
@@ -308,9 +306,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         reproduces exactly a contraction of meson fields
         tr[ M(rho,rho; tD,tD,tD) * M(phi,phi; tD,tD,tD) ]
         *************************************************/
-        // TEST CODE TO CHECK SUM OVER M-PHI-PHI
-        InsertSliceLocal(MPhiPhi,MPhiPhiTest,0,t,Tdir);
-        // END TEST CODE
         DistilMatrixSetIo<ComplexF> block(block_buf.data(), 1 , 1, nDL * nDS, nDL * nDS);
         for(int id1=0; id1<nDL * nDS; id1++)
         {
@@ -361,16 +356,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         //gridHD->Barrier();
     }
     
-    // TEST CODE
-    std::vector<TComplex>  buf2;
-    Result  result;
-    result.corr.resize(nT);
-    sliceSum(MPhiPhiTest, buf2, Tdir);
-    for (unsigned int t = 0; t < nT; ++t)
-    {
-        result.corr[t] = TensorRemove(buf2[t]);
-    }
-    saveResult("./MPhiPhiTest","v1v2",result);
 }
 
 END_MODULE_NAMESPACE
