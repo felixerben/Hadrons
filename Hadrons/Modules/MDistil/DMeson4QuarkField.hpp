@@ -247,6 +247,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     //md.SpinDilutionRight = index1[DistillationNoise<FImpl>::Index::s];
    
 
+    startTimer("file creation");
     makeFileDir(outPath, gridHD);
     unsigned int myRank = gridHD->ThisRank(); 
     DistilMatrixIo<HADRONS_DISTIL_IO_TYPE> matrix_io(outPath, DISTIL_MATRIX_NAME, nT, nDL * nDS, nDL * nDS);
@@ -255,6 +256,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         matrix_io.initFile(md);
     }
     gridHD->Barrier();
+    stopTimer("file creation");
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     // variables used in the loop structure
