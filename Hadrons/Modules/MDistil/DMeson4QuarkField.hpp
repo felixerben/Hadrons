@@ -4,6 +4,7 @@
 #include <Hadrons/Global.hpp>
 #include <Hadrons/Module.hpp>
 #include <Hadrons/ModuleFactory.hpp>
+#include <Hadrons/TimerArray.hpp>
 #include <Hadrons/Modules/MDistil/Base.hpp>
 
 BEGIN_HADRONS_NAMESPACE
@@ -228,7 +229,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     {
         md.Momentum.push_back(pmu);
      }
-    // metadata would ideally allow any string here so we could specify this correctly
     std::stringstream ss2;
     ss2 << par().gamma12 << "_" << par().gamma34;
     md.Operator          = ss2.str();
@@ -272,6 +272,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         MPhiPhi=Zero();    
         // 3D phase e^{ipx}
         ExtractSliceLocal(ph3d,ph,0,t,Tdir);  
+        startTimer("computation MPhiPhi");
         for(int id1=0; id1<nDL * nDS; id1++)
         {
             // this line is where the ordering s + ns*(l + nl*t) is assumed
@@ -302,11 +303,13 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 MPhiPhi += trace(prop3dtmp);
             }
         }
+        stopTimer("computation MPhiPhi");
         /*************************************************
         FE: checked here that a sliceSum over MPhiPhi
         reproduces exactly a contraction of meson fields
         tr[ M(rho,rho; tD,tD,tD) * M(phi,phi; tD,tD,tD) ]
         *************************************************/
+        startTimer("computation D-4quark");
         DistilMatrixSetIo<ComplexF> block(block_buf.data(), 1 , 1, nDL * nDS, nDL * nDS);
         for(int id1=0; id1<nDL * nDS; id1++)
         {
@@ -340,6 +343,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 block(0,0,id1,id2) = cache(0,0,0,0,0);                
             }
         }
+        stopTimer("computation D-4quark");
+        startTimer("serial I/O");
         LOG(Message) << "Starting serial IO for tH = " << tH << std::endl;
         DistilMatrixSetTimeSliceIo<ComplexF> block_relative(block_buf.data(), 1, nDL * nDS, nDL * nDS);
         std::string dataset_name = std::to_string(tKpi)+"-"+std::to_string(tKpi);
@@ -355,6 +360,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             gridHD->Barrier();
         }
         //gridHD->Barrier();
+        stopTimer("serial I/O");
     }
     
 }
