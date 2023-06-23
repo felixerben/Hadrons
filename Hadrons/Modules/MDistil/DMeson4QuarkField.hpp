@@ -41,15 +41,15 @@ public:
                                     std::string,                vectorStem3,   // SU(3) light
                                     std::string,                vectorStem4,   // SU(3) light
                                     std::vector<int>,           Dcontractions, // if this is e.g. {1, 3} then contract rho1 with v1 and rho2 with v3 
-                                    std::string,                noisePol1,     // noise policy of v1 - assert compatibility with M(rho,rho) 
-                                    std::string,                noisePol2,     // noise policy of v2 - assert compatibility with M(rho,rho) 
-                                    std::string,                noisePol3,     // noise policy of v3
-                                    std::string,                noisePol4,     // noise policy of v4
-                                    std::string,                timeSources1,  // time sources used for v1 - assert compatibility with M(rho,rho) 
-                                    std::string,                timeSources2,  // time sources used for v2 - assert compatibility with M(rho,rho) 
-                                    std::string,                timeSources3,  // time sources used for v3
-                                    std::string,                timeSources4,  // time sources used for v4
-                                    std::vector<std::string>,   noisePairs,    // specifying which noise pairs to contract over - assert that they are in M(rho,rho) and compatible with v1,v2
+                                    std::string,                noisePol,     // noise policy of v1 - assert compatibility with M(rho,rho) 
+                                    //std::string,                noisePol2,     // noise policy of v2 - assert compatibility with M(rho,rho) 
+                                    //std::string,                noisePol3,     // noise policy of v3
+                                    //std::string,                noisePol4,     // noise policy of v4
+                                    //std::string,                timeSources1,  // time sources used for v1 - assert compatibility with M(rho,rho) 
+                                    //std::string,                timeSources2,  // time sources used for v2 - assert compatibility with M(rho,rho) 
+                                    //std::string,                timeSources3,  // time sources used for v3
+                                    //std::string,                timeSources4,  // time sources used for v4
+                                    //std::vector<std::string>,   noisePairs,    // specifying which noise pairs to contract over - assert that they are in M(rho,rho) and compatible with v1,v2
                                     unsigned int,               tD,            // time of D meson
                                     unsigned int,               tKpi,          // time of yet uncontracted part
                                     Gamma::Algebra,             gamma12,         // between vector1 and vector2
@@ -100,7 +100,7 @@ TDMeson4QuarkField<FImpl>::TDMeson4QuarkField(const std::string name)
 template <typename FImpl>
 std::vector<std::string> TDMeson4QuarkField<FImpl>::getInput(void)
 {
-    std::vector<std::string> in = {par().vectorStem1, par().vectorStem2, par().vectorStem3, par().vectorStem4,par().noisePol1};
+    std::vector<std::string> in = {par().noisePol};
     
     return in;
 }
@@ -131,7 +131,7 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     envTmp   (ComplexField,    "ph3d"          ,1, gridLD);
     envTmpLat(ComplexField,    "coor");
 
-    auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol1);
+    auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol);
     int nDL = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::l);        
     int nDS = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::s);     
     envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, nDL * nDS * nDL * nDS);
@@ -161,14 +161,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     ContractionDistilMesonField<ComplexD,ComplexF> DMeson(mfPath,env().getDim(Tdir), timer);
      
     // noise class -- assert they are identical and an "exact distillation" policy
-    auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol1);
-    auto &dN2 = envGet(DistillationNoise<FImpl>, par().noisePol2);
-    auto &dN3 = envGet(DistillationNoise<FImpl>, par().noisePol3);
-    auto &dN4 = envGet(DistillationNoise<FImpl>, par().noisePol4);
-    if(dN2.generateHash() != dilNoise.generateHash() || dN3.generateHash() != dilNoise.generateHash()|| dN4.generateHash() != dilNoise.generateHash())
-    {
-        HADRONS_ERROR(Implementation, "All noise policies must be identical");
-    }
+    auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol);
     int nNoise = dilNoise.size(); 
     if(nNoise>1)
     {
@@ -281,10 +274,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             index1 = dilNoise.dilutionCoordinates(id1);  
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
             ds1 = index1[DistillationNoise<FImpl>::Index::s];
-            auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem1);
-            // full dilution assumed here, and that solve 1 comes from timeslice tD = d_{tD}
-            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tD;
-            fermion4dtmp = solve1[dSolve1];
+            dSolve1 = dilNoise.dilutionIndex(tD,dk1,ds1);
+            DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem1, 1, nDL, nDS, nDT, dSolve1, vm().getTrajectory());
             // this is vector 1 on timeslice tH 
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
@@ -292,10 +283,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 index2 = dilNoise.dilutionCoordinates(id2);  
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
-                auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem2);
-                // full dilution assumed here, and that solve 2 comes from timeslice tD = d_{tD}
-                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tD; 
-                fermion4dtmp = solve2[dSolve2];
+                dSolve2 = dilNoise.dilutionIndex(tD,dk2,ds2);
+                DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
                 // this is vector 2 on timeslice tH 
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g12*fermion3dtmp2;
@@ -319,10 +308,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             index1 = dilNoise.dilutionCoordinates(id1);  
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
             ds1 = index1[DistillationNoise<FImpl>::Index::s];
-            auto &solve1 = envGet(std::vector<FermionField>, par().vectorStem3);
-            // full dilution assumed here, and that solve 3 comes from timeslice tKpi = d_{tKpi}
-            dSolve1 = ds1 + nDS * dk1 + nDL * nDS * tKpi; 
-            fermion4dtmp = solve1[dSolve1];
+            dSolve1 = dilNoise.dilutionIndex(tKpi,dk1,ds1);
+            DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem3, 1, nDL, nDS, nDT, dSolve1, vm().getTrajectory());
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
             {
@@ -331,10 +318,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 index2 = dilNoise.dilutionCoordinates(id2);  
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
-                auto &solve2 = envGet(std::vector<FermionField>, par().vectorStem4);
-                // full dilution assumed here, and that solve 4 comes from timeslice tKpi = d_{tKpi}
-                dSolve2 = ds2 + nDS * dk2 + nDL * nDS * tKpi; 
-                fermion4dtmp = solve2[dSolve2];
+                dSolve2 = dilNoise.dilutionIndex(tKpi,dk2,ds2);
+                DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem4, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g34*fermion3dtmp2;          
                 fermion3dtmp2 = fermion3dtmp3;
@@ -353,7 +338,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         gridHD->Barrier();
         for(int iIO=0; iIO<N_ranks; iIO++)
         {
-            //gridHD->Barrier();
             if(iIO==i_rank)
             {
                 LOG(Message) << "Writing from rank " << i_rank << std::endl;
@@ -361,7 +345,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             }
             gridHD->Barrier();
         }
-        //gridHD->Barrier();
         stopTimer("serial I/O");
     }
     
