@@ -275,7 +275,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
             ds1 = index1[DistillationNoise<FImpl>::Index::s];
             dSolve1 = dilNoise.dilutionIndex(tD,dk1,ds1);
+            startTimer("charm I/O");
             DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem1, 1, nDL, nDS, nDT, dSolve1, vm().getTrajectory());
+            stopTimer("charm I/O");
             // this is vector 1 on timeslice tH 
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
@@ -284,7 +286,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
                 dSolve2 = dilNoise.dilutionIndex(tD,dk2,ds2);
+                startTimer("light I/O");
                 DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+                stopTimer("light I/O");
                 // this is vector 2 on timeslice tH 
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g12*fermion3dtmp2;
