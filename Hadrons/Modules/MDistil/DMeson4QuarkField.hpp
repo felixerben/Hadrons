@@ -131,9 +131,13 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     envTmp   (ComplexField,    "ph3d"          ,1, gridLD);
     envTmpLat(ComplexField,    "coor");
 
+
     auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol);
     int nDL = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::l);        
     int nDS = dilNoise.dilutionSize(DistillationNoise<FImpl>::Index::s);     
+
+    envTmp    (std::vector<FermionField>, "vec_light", 1, nDL * nDS, gridLD);
+    
     envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, nDL * nDS * nDL * nDS);
     envTmp(Vector<HADRONS_DISTIL_TYPE>,    "cache_buf", 1, nDL * nDS * nDL * nDS);
     
@@ -216,6 +220,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     envGetTmp(ComplexField,    MPhiPhi);
     envGetTmp(ComplexField,    cplx3dtmp);
     
+    envGetTmp(std::vector<FermionField>,    vec_light);
+    
     // initialise file and metadata
     DistilMesonFieldMetadata<FImpl> md;
     for (auto pmu: p)
@@ -267,6 +273,22 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         MPhiPhi=Zero();    
         // 3D phase e^{ipx}
         ExtractSliceLocal(ph3d,ph,0,t,Tdir);  
+        // initialise vector 2
+        // w/r/t I/O cost: this is still wasteful by a factor Nt
+        // ideally we could read in a timeslice of the field only....
+        startTimer("light I/O");
+        for(int id2=0; id2<nDL * nDS; id2++)
+        {
+            index2 = dilNoise.dilutionCoordinates(id2);  
+            dk2 = index2[DistillationNoise<FImpl>::Index::l];
+            ds2 = index2[DistillationNoise<FImpl>::Index::s];
+            dSolve2 = dilNoise.dilutionIndex(tD,dk2,ds2);
+            DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            // this is vector 2 on timeslice tH 
+            ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
+            vec_light[id2]=fermion3dtmp2;
+        }
+        stopTimer("light I/O");
         startTimer("computation MPhiPhi");
         for(int id1=0; id1<nDL * nDS; id1++)
         {
@@ -282,7 +304,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
             for(int id2=0; id2<nDL * nDS; id2++)
             {
-                index2 = dilNoise.dilutionCoordinates(id2);  
+                /*index2 = dilNoise.dilutionCoordinates(id2);  
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
                 dSolve2 = dilNoise.dilutionIndex(tD,dk2,ds2);
@@ -292,6 +314,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 // this is vector 2 on timeslice tH 
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g12*fermion3dtmp2;
+                */
+                fermion3dtmp3 = g12*vec_light[id2];
                 fermion3dtmp2 = DMeson(tD,tD,tD)(id1,id2)*fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
                 // this object is sum_{spin,colour,d1,d2} (DMeson[d1,d2] * vector1[d1] * gamma12 * vector2[d2]) on timeslice tH
@@ -299,6 +323,19 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             }
         }
         stopTimer("computation MPhiPhi");
+        startTimer("light I/O");
+        for(int id2=0; id2<nDL * nDS; id2++)
+        {
+            index2 = dilNoise.dilutionCoordinates(id2);  
+            dk2 = index2[DistillationNoise<FImpl>::Index::l];
+            ds2 = index2[DistillationNoise<FImpl>::Index::s];
+            dSolve2 = dilNoise.dilutionIndex(tKpi,dk2,ds2);
+            DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            // this is vector 2 on timeslice tH 
+            ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
+            vec_light[id2]=fermion3dtmp2;
+        }
+        stopTimer("light I/O");
         /*************************************************
         FE: checked here that a sliceSum over MPhiPhi
         reproduces exactly a contraction of meson fields
@@ -308,6 +345,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         DistilMatrixSetIo<ComplexF> block(block_buf.data(), 1 , 1, nDL * nDS, nDL * nDS);
         for(int id1=0; id1<nDL * nDS; id1++)
         {
+            /*
             // this line is where the ordering s + ns*(l + nl*t) is assumed
             index1 = dilNoise.dilutionCoordinates(id1);  
             dk1 = index1[DistillationNoise<FImpl>::Index::l];
@@ -315,10 +353,13 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             dSolve1 = dilNoise.dilutionIndex(tKpi,dk1,ds1);
             DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem3, 1, nDL, nDS, nDT, dSolve1, vm().getTrajectory());
             ExtractSliceLocal(fermion3dtmp1,fermion4dtmp,0,t,Tdir);
+            */
+            fermion3dtmp1 = vec_light[id1];
             for(int id2=0; id2<nDL * nDS; id2++)
             {
                 // no caching for the moment - but keep this here in case anyone wants to optimise this code at some stage
                 DistilMatrixSetCache<ComplexD> cache(cache_buf.data(), 1, 1, 1, 1, 1);
+                /*
                 index2 = dilNoise.dilutionCoordinates(id2);  
                 dk2 = index2[DistillationNoise<FImpl>::Index::l];
                 ds2 = index2[DistillationNoise<FImpl>::Index::s];
@@ -326,6 +367,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem4, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
                 ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 fermion3dtmp3 = g34*fermion3dtmp2;          
+                */
+                fermion3dtmp3 = g34*vec_light[id2];          
                 fermion3dtmp2 = fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
                 cplx3dtmp = trace(prop3dtmp)*MPhiPhi*ph3d;
