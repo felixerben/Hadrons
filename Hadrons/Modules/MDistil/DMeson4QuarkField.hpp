@@ -50,6 +50,7 @@ public:
                                     //std::string,                timeSources3,  // time sources used for v3
                                     //std::string,                timeSources4,  // time sources used for v4
                                     //std::vector<std::string>,   noisePairs,    // specifying which noise pairs to contract over - assert that they are in M(rho,rho) and compatible with v1,v2
+                                    unsigned int,               pIO,            // parallel I/O yes/no?
                                     unsigned int,               tD,            // time of D meson
                                     unsigned int,               tKpi,          // time of yet uncontracted part
                                     Gamma::Algebra,             gamma12,         // between vector1 and vector2
@@ -266,6 +267,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     const uint i_rank =  gridHD->ThisRank();
     const uint N_ranks = gridHD->RankCount();   
  
+    int pIO = par().pIO;
+    const uint my_rank3d =  gridLD->ThisRank();
+    const uint N_ranks3d =  gridLD->RankCount();   
+    //std::vector<int> taskList; 
+    //for(int id=my_rank3d; id<nDL * nDS; id += N_ranks3d)
+    //{
+    //   taskList.push_back(id);
+    //}
+ 
     // loop over tH
     for (int t = 0; t < Ntlocal; t++ )
     {
@@ -277,6 +287,28 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         // w/r/t I/O cost: this is still wasteful by a factor Nt
         // ideally we could read in a timeslice of the field only....
         startTimer("light I/O");
+        if(pIO)
+        {
+        LOG(Message) << "Starting PARALLEL I/O" << std::endl;
+        gridLD->Barrier();
+        for(int id2=my_rank3d; id2<nDL * nDS; id2+=N_ranks3d)
+        {
+            index2 = dilNoise.dilutionCoordinates(id2);  
+            dk2 = index2[DistillationNoise<FImpl>::Index::l];
+            ds2 = index2[DistillationNoise<FImpl>::Index::s];
+            dSolve2 = dilNoise.dilutionIndex(tD,dk2,ds2);
+            //DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            std::string tFileName = par().vectorStem2;
+            tFileName.append("_t");
+            tFileName.append(std::to_string(tH));
+            DistillationVectorsIo::readComponent(fermion3dtmp2, tFileName, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            // this is vector 2 on timeslice tH 
+            //ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
+            vec_light[id2]=fermion3dtmp2;
+        }
+        gridLD->Barrier();
+        } else
+        {
         for(int id2=0; id2<nDL * nDS; id2++)
         {
             index2 = dilNoise.dilutionCoordinates(id2);  
@@ -291,6 +323,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             // this is vector 2 on timeslice tH 
             //ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
             vec_light[id2]=fermion3dtmp2;
+        }
         }
         stopTimer("light I/O");
         startTimer("computation MPhiPhi");
@@ -332,6 +365,28 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         }
         stopTimer("computation MPhiPhi");
         startTimer("light I/O");
+        if(pIO)
+        {
+        LOG(Message) << "Starting PARALLEL I/O" << std::endl;
+        gridLD->Barrier();
+        for(int id2=my_rank3d; id2<nDL * nDS; id2+=N_ranks3d)
+        {
+            index2 = dilNoise.dilutionCoordinates(id2);  
+            dk2 = index2[DistillationNoise<FImpl>::Index::l];
+            ds2 = index2[DistillationNoise<FImpl>::Index::s];
+            dSolve2 = dilNoise.dilutionIndex(tKpi,dk2,ds2);
+            //DistillationVectorsIo::readComponent(fermion4dtmp, par().vectorStem2, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            // this is vector 2 on timeslice tH 
+            //ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
+            std::string tFileName = par().vectorStem2;
+            tFileName.append("_t");
+            tFileName.append(std::to_string(tH));
+            DistillationVectorsIo::readComponent(fermion3dtmp2, tFileName, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
+            vec_light[id2]=fermion3dtmp2;
+        }
+        gridLD->Barrier();
+        } else
+        {
         for(int id2=0; id2<nDL * nDS; id2++)
         {
             index2 = dilNoise.dilutionCoordinates(id2);  
@@ -346,6 +401,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             tFileName.append(std::to_string(tH));
             DistillationVectorsIo::readComponent(fermion3dtmp2, tFileName, 1, nDL, nDS, nDT, dSolve2, vm().getTrajectory());
             vec_light[id2]=fermion3dtmp2;
+        }
         }
         stopTimer("light I/O");
         /*************************************************
