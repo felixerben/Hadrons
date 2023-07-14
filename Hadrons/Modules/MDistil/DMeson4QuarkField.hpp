@@ -266,6 +266,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         iKpi++;
     }
     stopTimer("file creation");
+    // determine timeslices tH which are between tD and tKpi (shorter distance)
     std::vector<std::vector<unsigned int>> tHs;
     std::vector<unsigned int> tHs_flat;
     for(auto tKp : tKpi)
@@ -300,10 +301,6 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             tHs.push_back(tH_iKpi);
         }
     }
-    LOG(Message) << "tD " << tD << std::endl;
-    LOG(Message) << "tKpi " << tKpi << std::endl;
-    LOG(Message) << "tH values " << tHs << std::endl;
-    LOG(Message) << "tH values 2 " << tHs_flat << std::endl;
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     // variables used in the loop structure
