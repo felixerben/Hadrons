@@ -38,12 +38,13 @@ public:
                                     std::string,                DMesonField,   // M(rho,rho) meson field for the D
                                     std::string,                vectorStemC,   // charm
                                     std::string,                vectorStemL,   // SU(3) light
-                                    std::string,                noisePol,     // noise policy of v1 - assert compatibility with M(rho,rho) 
-                                    unsigned int,               batchIO,            // parallel I/O yes/no?
+                                    std::string,                noisePol,      // noise policy of v1 - assert compatibility with M(rho,rho) 
+                                    unsigned int,               batchIO,       // parallel I/O yes/no?
+                                    unsigned int,               fewerTH,       // compute all tH or just the ones between tD and tKpi?
                                     unsigned int,               tD,            // time of D meson
                                     std::vector<unsigned int>,  tKpi,          // time of yet uncontracted part
-                                    Gamma::Algebra,             gamma12,         // between vector1 and vector2
-                                    Gamma::Algebra,             gamma34,         // between vector3 and vector4
+                                    Gamma::Algebra,             gamma12,       // between vector1 and vector2
+                                    Gamma::Algebra,             gamma34,       // between vector3 and vector4
                                     std::string,                mom,           // momentum injected into Hw
                                     unsigned int,               blockSize,     // tunable parameters
                                     unsigned int,               cacheSize);
@@ -206,6 +207,11 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     envGetTmp(ComplexField,    MPhiPhi);
     envGetTmp(ComplexField,    cplx3dtmp);
     
+    int fewerTH = par().fewerTH;
+    if(fewerTH && Ntlocal < nT)
+    {
+        LOG(Message) << "WARNING: Option 'fewerTH' is only optimised for trivial mpi layout in time-direction. You are likely wasting resources in this job!" << std::endl;
+    }
     int batchIO = par().batchIO;
     envGetTmp(std::vector<FermionField>,    vec_light);
     envGetTmp(std::vector<FermionField>,    vec_charm);
@@ -257,9 +263,47 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         }
         gridHD->Barrier();
         matrix_io[iKpi] = mIO;
-        iKpi+=1;
+        iKpi++;
     }
     stopTimer("file creation");
+    std::vector<std::vector<unsigned int>> tHs;
+    std::vector<unsigned int> tHs_flat;
+    for(auto tKp : tKpi)
+    {
+        std::vector<unsigned int> tH_iKpi;
+        int tDMinusTKpi = (tD - tKp + nT) % nT;
+        int tKpiMinusTD = (tKp - tD + nT) % nT;
+        if(tDMinusTKpi < tKpiMinusTD)
+        {
+            for(int iTH = 1; iTH < tDMinusTKpi; iTH++)
+            {
+                int tH_tmp = (tKp + iTH + nT) % nT;
+                tH_iKpi.push_back(tH_tmp);      
+                if( std::find(tHs_flat.begin(), tHs_flat.end(), tH_tmp) == tHs_flat.end())
+                {
+                    tHs_flat.push_back(tH_tmp);     
+                } 
+            }     
+            tHs.push_back(tH_iKpi);
+        }
+        else
+        {
+            for(int iTH = 1; iTH < tKpiMinusTD; iTH++)
+            {
+                int tH_tmp = (tD + iTH + nT) % nT;
+                tH_iKpi.push_back(tH_tmp);      
+                if( std::find(tHs_flat.begin(), tHs_flat.end(), tH_tmp) == tHs_flat.end())
+                {
+                    tHs_flat.push_back(tH_tmp);     
+                } 
+            }     
+            tHs.push_back(tH_iKpi);
+        }
+    }
+    LOG(Message) << "tD " << tD << std::endl;
+    LOG(Message) << "tKpi " << tKpi << std::endl;
+    LOG(Message) << "tH values " << tHs << std::endl;
+    LOG(Message) << "tH values 2 " << tHs_flat << std::endl;
     
     LOG(Message) << "WARNING: Assuming ordering s + ns*(l + nl*t) in DilutedNoise.hpp. This code will break when this changes!" << std::endl;
     // variables used in the loop structure
@@ -276,6 +320,11 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     for (int t = 0; t < Ntlocal; t++ )
     {
         tH = t + Ntfirst;
+        if(fewerTH && (std::find(tHs_flat.begin(), tHs_flat.end(), tH) == tHs_flat.end()) )
+        {
+            LOG(Message) << "Only computing three-point function for timeslices between tD and tKpi, skipping tH = " << tH << std::endl;
+            continue;
+        } 
         MPhiPhi=Zero();    
         // 3D phase e^{ipx}
         ExtractSliceLocal(ph3d,ph,0,t,Tdir);  
@@ -354,6 +403,12 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         iKpi=0;
         for(auto tKp : tKpi)
         {
+            if(fewerTH && (std::find(tHs[iKpi].begin(), tHs[iKpi].end(), tH) == tHs[iKpi].end()) )
+            {
+                LOG(Message) << "Only computing three-point function for timeslices between tD and tKpi, skipping tH = " << tH << " for tKpi = " << tKp << " and tD = " << tD << std::endl;
+                iKpi++;
+                continue;
+            } 
             startTimer("K-Pi I/O: light");
             if(batchIO)
             {
@@ -421,7 +476,7 @@ void TDMeson4QuarkField<FImpl>::execute(void)
                 gridHD->Barrier();
             }
             stopTimer("serial write I/O");
-            iKpi+=1;
+            iKpi++;
         }
     }
     
