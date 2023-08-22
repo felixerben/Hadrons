@@ -111,8 +111,10 @@ void TConvert3DField<FImpl>::setup(void)
     envTmp    (std::vector<FermionField>, "vector3d", 1, nDL * nDS, gridLD);
     envTmp   (FermionField,    "fermion3dtmp" ,1, gridLD);
 
-
-
+    Grid::Coordinate coor  = gridHD->GlobalDimensions();
+    coor[3] = nDL * nDS;
+    Grid::GridCartesian * gridDD = Grid::SpaceTimeGrid::makeFourDimGrid( coor, GridDefaultSimd(Nd,vComplex::Nsimd()), GridDefaultMpi() );
+    envTmp   (FermionField,    "fermionDDtmp" ,1, gridDD);
 }
 
 // execution ///////////////////////////////////////////////////////////////////
@@ -128,6 +130,7 @@ void TConvert3DField<FImpl>::execute(void)
 
     envGetTmp(std::vector<FermionField>,    vector3d);
     envGetTmp(FermionField,    fermion3dtmp);
+    envGetTmp(FermionField,    fermionDDtmp);
 
     const int Nt{env().getDim(Tdir)};
     auto &dilNoise = envGet(DistillationNoise<FImpl>, par().noisePol);
@@ -161,10 +164,11 @@ void TConvert3DField<FImpl>::execute(void)
                 // this is vector 2 on timeslice tH 
                 //ExtractSliceLocal(fermion3dtmp2,fermion4dtmp,0,t,Tdir);
                 vector3d[id]=fermion3dtmp;
+                InsertSliceLocal(fermion3dtmp,fermionDDtmp,0,id,Tdir);
             }
             stopTimer("read I/O");
 
-            startTimer("write I/O");
+            /*startTimer("write I/O");
             std::string tFileName = par().outPath;
             tFileName.append("_tSm");
             tFileName.append(std::to_string(tD));
@@ -172,7 +176,17 @@ void TConvert3DField<FImpl>::execute(void)
             tFileName.append(std::to_string(tH));
             std::vector<int> tS;
             DistillationVectorsIo::write(tFileName, vector3d, "3d vector", 1, nDL, nDS, nDT, tS, false, vm().getTrajectory());
+            stopTimer("write I/O");*/
+            startTimer("write I/O");
+            tFileName = par().outPath;
+            tFileName.append("_DD");
+            tFileName.append("_tSm");
+            tFileName.append(std::to_string(tD));
+            tFileName.append("_tLoc");
+            tFileName.append(std::to_string(tH));
+            DistillationVectorsIo::writeComponent(tFileName, fermionDDtmp, "unsmSolve", 1, nDL, nDS, nDT, tS, 0, vm().getTrajectory());
             stopTimer("write I/O");
+
         }
     }
 

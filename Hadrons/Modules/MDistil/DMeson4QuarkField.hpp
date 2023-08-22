@@ -133,6 +133,15 @@ void TDMeson4QuarkField<FImpl>::setup(void)
     
     envTmp(Vector<HADRONS_DISTIL_IO_TYPE>, "block_buf", 1, nDL * nDS * nDL * nDS);
     envTmp(Vector<HADRONS_DISTIL_TYPE>,    "cache_buf", 1, nDL * nDS * nDL * nDS);
+
+    Grid::Coordinate coor  = gridHD->GlobalDimensions();
+    coor[3] = nDL * nDS;
+    Grid::GridCartesian * gridDD = Grid::SpaceTimeGrid::makeFourDimGrid( coor, GridDefaultSimd(Nd,vComplex::Nsimd()), GridDefaultMpi() );
+    envTmp   (FermionField,    "fermionDDtmp_light" ,1, gridDD);
+    envTmp   (FermionField,    "fermionDDtmp_charm" ,1, gridDD);
+
+
+
     
 }
 
@@ -215,6 +224,10 @@ void TDMeson4QuarkField<FImpl>::execute(void)
     int batchIO = par().batchIO;
     envGetTmp(std::vector<FermionField>,    vec_light);
     envGetTmp(std::vector<FermionField>,    vec_charm);
+    envGetTmp(FermionField,    fermionDDtmp_light);
+    envGetTmp(FermionField,    fermionDDtmp_charm);
+
+
 
     // initialise file and metadata
     DistilMesonFieldMetadata<FImpl> md;
@@ -330,21 +343,35 @@ void TDMeson4QuarkField<FImpl>::execute(void)
         {
             startTimer("MPhiPhi I/O: light");
             LOG(Message) << "Starting batch I/O" << std::endl;
-            tFileName = par().vectorStemL;
+            /*tFileName = par().vectorStemL;
             tFileName.append("_tSm");
             tFileName.append(std::to_string(tD));
             tFileName.append("_tLoc");
             tFileName.append(std::to_string(tH));
-            DistillationVectorsIo::read(vec_light, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());
+            DistillationVectorsIo::read(vec_light, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());*/
+            tFileName = par().vectorStemL;
+            tFileName.append("_DD");
+            tFileName.append("_tSm");
+            tFileName.append(std::to_string(tD));
+            tFileName.append("_tLoc");
+            tFileName.append(std::to_string(tH));
+            DistillationVectorsIo::readComponent(fermionDDtmp_light, tFileName, 1, nDL, nDS, nDT, 0, vm().getTrajectory());
             stopTimer("MPhiPhi I/O: light");
             startTimer("MPhiPhi I/O: charm");
             LOG(Message) << "Starting batch I/O" << std::endl;
-            tFileName = par().vectorStemC;
+            /*tFileName = par().vectorStemC;
             tFileName.append("_tSm");
             tFileName.append(std::to_string(tD));
             tFileName.append("_tLoc");
             tFileName.append(std::to_string(tH));
-            DistillationVectorsIo::read(vec_charm, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());
+            DistillationVectorsIo::read(vec_charm, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());*/
+            tFileName = par().vectorStemC;
+            tFileName.append("_DD");
+            tFileName.append("_tSm");
+            tFileName.append(std::to_string(tD));
+            tFileName.append("_tLoc");
+            tFileName.append(std::to_string(tH));
+            DistillationVectorsIo::readComponent(fermionDDtmp_charm, tFileName, 1, nDL, nDS, nDT, 0, vm().getTrajectory());
             stopTimer("MPhiPhi I/O: charm");
         }
         else
@@ -374,7 +401,8 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             dSolve1 = dilNoise.dilutionIndex(tD,dk1,ds1);
             if(batchIO)
             {
-                fermion3dtmp1 = vec_charm[id1];
+                //fermion3dtmp1 = vec_charm[id1];
+                ExtractSliceLocal(fermion3dtmp1, fermionDDtmp_charm,0,id1,Tdir);
             }
             else
             {
@@ -389,7 +417,9 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             startTimer("computation MPhiPhi");
             for(int id2=0; id2<nDL * nDS; id2++)
             {
-                fermion3dtmp3 = g12*vec_light[id2];
+                //fermion3dtmp3 = g12*vec_light[id2];
+                ExtractSliceLocal(fermion3dtmp2, fermionDDtmp_light,0,id2,Tdir);
+                fermion3dtmp3 = g12*fermion3dtmp2;
                 fermion3dtmp2 = DMeson(tD,tD,tD)(id1,id2)*fermion3dtmp3;
                 prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
                 // this object is sum_{spin,colour,d1,d2} (DMeson[d1,d2] * vector1[d1] * gamma12 * vector2[d2]) on timeslice tH
@@ -410,12 +440,19 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             if(batchIO)
             {
                 LOG(Message) << "Starting batch I/O" << std::endl;
-                std::string tFileName = par().vectorStemL;
+                /*std::string tFileName = par().vectorStemL;
                 tFileName.append("_tSm"); 
                 tFileName.append(std::to_string(tKp));  
                 tFileName.append("_tLoc");
                 tFileName.append(std::to_string(tH));
-                DistillationVectorsIo::read(vec_light, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());
+                DistillationVectorsIo::read(vec_light, tFileName, 1, nDL, nDS, nDT, false, vm().getTrajectory());*/
+                tFileName = par().vectorStemL;
+                tFileName.append("_DD");
+                tFileName.append("_tSm");
+                tFileName.append(std::to_string(tKp));
+                tFileName.append("_tLoc");
+                tFileName.append(std::to_string(tH));
+                DistillationVectorsIo::readComponent(fermionDDtmp_light, tFileName, 1, nDL, nDS, nDT, 0, vm().getTrajectory());
             } 
             else
             {
@@ -443,12 +480,15 @@ void TDMeson4QuarkField<FImpl>::execute(void)
             DistilMatrixSetIo<ComplexF> block(block_buf.data(), 1 , 1, nDL * nDS, nDL * nDS);
             for(int id1=0; id1<nDL * nDS; id1++)
             {
-                fermion3dtmp1 = vec_light[id1];
+                //fermion3dtmp1 = vec_light[id1];
+                ExtractSliceLocal(fermion3dtmp1, fermionDDtmp_light,0,id1,Tdir);
                 for(int id2=0; id2<nDL * nDS; id2++)
                 {
                     // no caching for the moment - but keep this here in case anyone wants to optimise this code at some stage
                     DistilMatrixSetCache<ComplexD> cache(cache_buf.data(), 1, 1, 1, 1, 1);
-                    fermion3dtmp3 = g34*vec_light[id2];          
+                    //fermion3dtmp3 = g34*vec_light[id2];          
+                    ExtractSliceLocal(fermion3dtmp2, fermionDDtmp_light,0,id2,Tdir);
+                    fermion3dtmp3 = g34*fermion3dtmp2;
                     fermion3dtmp2 = fermion3dtmp3;
                     prop3dtmp = outerProduct(fermion3dtmp1,fermion3dtmp2);
                     cplx3dtmp = trace(prop3dtmp)*MPhiPhi*ph3d;
