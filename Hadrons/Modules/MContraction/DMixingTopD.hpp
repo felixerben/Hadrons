@@ -151,9 +151,11 @@ std::vector<std::string> TDMixingTopD<FImpl>::getInput(void)
     std::vector<std::string> in = {par().qULeft,
                                    par().qCLeft,
                                    par().qURight,
-                                   par().qCRight,
-                                   par().qLoop1,
-                                   par().qLoop2};
+                                   par().qCRight};
+    if (!par().qLoop1.empty())
+        in.push_back(par().qLoop1);
+    if (!par().qLoop2.empty())
+        in.push_back(par().qLoop2);
 
     return in;
 }
@@ -221,21 +223,20 @@ std::vector<std::vector<Complex>> TDMixingTopD<FImpl>::contract_D(
 template <typename FImpl>
 void TDMixingTopD<FImpl>::setup(void)
 {
-
-    GridCartesian *grid = envGetGrid(FermionField);
-
-    auto &ql1 = envGet(std::vector<PropagatorField *>, par().qLoop1);
-    int Neta = ql1.size();
+    int Neta1 = 1;
+    int Neta2 = 1;
+    if (!par().qLoop1.empty())
+        Neta1 = (envGet(std::vector<PropagatorField *>, par().qLoop1)).size();
+    if (!par().qLoop2.empty())
+        Neta2 = (envGet(std::vector<PropagatorField *>, par().qLoop2)).size();
+    
     const int Nt = env().getDim(Tdir);
 
-    envTmp(std::vector<SlicedPropagator>, "half_l", 1, 2 * Neta, SlicedPropagator(Nt));
-    envTmp(std::vector<SlicedPropagator>, "half_r", 1, 2 * Neta, SlicedPropagator(Nt));
-    envTmp(std::vector<PropagatorField>, "GdsG", 1, 2, PropagatorField(env().getGrid()));
+    envTmp(std::vector<SlicedPropagator>, "half_l", 1, 2 * Neta1, SlicedPropagator(Nt));
+    envTmp(std::vector<SlicedPropagator>, "half_r", 1, 2 * Neta2, SlicedPropagator(Nt));
+    envTmp(std::vector<PropagatorField>, "GdsG1", 1, 2, PropagatorField(env().getGrid()));
+    envTmp(std::vector<PropagatorField>, "GdsG2", 1, 2, PropagatorField(env().getGrid()));
 
-    if (par().qLoop1 != par().qLoop2)
-    {
-        HADRONS_ERROR(Argument, "Current implementation for identical loops only");
-    }
     envCreate(HadronsSerializable, getName(), 1, 0);
 }
 
@@ -248,31 +249,47 @@ void TDMixingTopD<FImpl>::execute(void)
     LOG(Message) << "qCLeft  : " << par().qCLeft << std::endl;
     LOG(Message) << "qURight : " << par().qURight << std::endl;
     LOG(Message) << "qCRight : " << par().qCRight << std::endl;
-    LOG(Message) << "qLoop1  : " << par().qLoop1 << std::endl;
-    LOG(Message) << "qLoop2  : " << par().qLoop2 << std::endl;
+    bool qLoop1_empty = par().qLoop1.empty();
+    bool qLoop2_empty = par().qLoop2.empty();
+    if (qLoop1_empty)
+        LOG(Message) << "Empty qLoop1 : (Pseudo)Scalar bilinear" << std::endl;
+    else
+        LOG(Message) << "qLoop1  : " << par().qLoop1 << std::endl;
+    if (qLoop2_empty)
+        LOG(Message) << "Empty qLoop2 : (Pseudo)Scalar bilinear" << std::endl;
+    else
+        LOG(Message) << "qLoop2  : " << par().qLoop2 << std::endl;
 
     std::vector<Result> result;
 
     const int Nt{env().getDim(Tdir)};
+    GridCartesian *grid = envGetGrid(FermionField);
+
+    std::vector<PropagatorField *> ql_default(1,nullptr);
 
     auto &qul = envGet(PropagatorField, par().qULeft);
     auto &qcl = envGet(PropagatorField, par().qCLeft);
     auto &qur = envGet(PropagatorField, par().qURight);
     auto &qcr = envGet(PropagatorField, par().qCRight);
-    auto &ql1 = envGet(std::vector<PropagatorField *>, par().qLoop1);
-    auto &ql2 = envGet(std::vector<PropagatorField *>, par().qLoop2);
+    auto &ql1 = (qLoop1_empty)  ? ql_default
+                                        : envGet(std::vector<PropagatorField *>, par().qLoop1);
+    auto &ql2 = (qLoop2_empty)  ? ql_default
+                                        : envGet(std::vector<PropagatorField *>, par().qLoop2);
+
+    PropagatorField Unit(grid); Unit = 1;
 
     Gamma g5(Gamma::Algebra::Gamma5);
     const PropagatorField qur_adj = g5 * adj(qur) * g5;
     const PropagatorField qul_adj = g5 * adj(qul) * g5;
 
-    // this is assuming both loops are identical
-    int Neta = ql1.size();
-    bool same_loop_noise = true;
+    bool same_loop_noise = (par().qLoop1 == par().qLoop2) and !qLoop1_empty and !qLoop2_empty;
+    int Neta1 = ql1.size();
+    int Neta2 = ql2.size();
 
     envGetTmp(std::vector<SlicedPropagator>, half_l);
     envGetTmp(std::vector<SlicedPropagator>, half_r);
-    envGetTmp(std::vector<PropagatorField>, GdsG);
+    envGetTmp(std::vector<PropagatorField>, GdsG1);
+    envGetTmp(std::vector<PropagatorField>, GdsG2);
 
     std::vector<std::vector<Complex>> tmpRes(Nt, std::vector<Complex>(Nt, 0.));
     std::vector<std::vector<Complex>> tmpSum(Nt, std::vector<Complex>(Nt, 0.));
@@ -280,24 +297,50 @@ void TDMixingTopD<FImpl>::execute(void)
 
     SlicedPropagator Lsum(Nt), Rsum(Nt);
 
+    std::vector<OpStruct> r_vals;
+    if (qLoop1_empty) r_vals = {OpStruct::Two};
+    else                      r_vals = {OpStruct::One,OpStruct::Two};
+    std::vector<OpStruct> s_vals;
+    if (qLoop2_empty) s_vals = {OpStruct::Two};
+    else                      s_vals = {OpStruct::One,OpStruct::Two};
+
     for (const auto p : {Parity::Pos,Parity::Neg})
     {
-        for (int i = 0; i < Neta; i++)
+        for (int i = 0; i < std::max(Neta1,Neta2); i++)
         {
-            // here one has to add ql2 if one wants them to be allowed to be different
-            startTimer("GH_cap");
-            DMixingUtils<FImpl>::GH_cap(GdsG, *ql1[i], p);
-            stopTimer("GH_cap");
-            for (const auto r : {OpStruct::One,OpStruct::Two})
-            {
-                half_l[half_idx(r,i,Neta)] = contract_D_half(qcl, qur_adj, GdsG[r]);
-                half_r[half_idx(r,i,Neta)] = contract_D_half(qcr, qul_adj, GdsG[r]);
+            if (i < Neta1) {
+                startTimer("GH_cap");
+                if (qLoop1_empty) {
+                    GdsG1[OpStruct::One] = Unit * parityG[p];
+                    GdsG1[OpStruct::Two] = Unit * parityG[p];
+                } else {
+                    DMixingUtils<FImpl>::GH_cap(GdsG1, *ql1[i], p);
+                }
+                stopTimer("GH_cap");
+                for (const auto r : r_vals)
+                    half_l[half_idx(r,i,Neta1)] = contract_D_half(qcl, qur_adj, GdsG1[r]);
+            }
+            if (i < Neta2) {
+                if (same_loop_noise) {
+                    GdsG2 = GdsG1;
+                } else {
+                    startTimer("GH_cap");
+                    if (qLoop2_empty) {
+                        GdsG2[OpStruct::One] = Unit * parityG[p];
+                        GdsG2[OpStruct::Two] = Unit * parityG[p];
+                    } else {
+                        DMixingUtils<FImpl>::GH_cap(GdsG2, *ql2[i], p);
+                    }
+                    stopTimer("GH_cap");
+                }
+                for (const auto s : s_vals)
+                    half_r[half_idx(s,i,Neta2)] = contract_D_half(qcr, qul_adj, GdsG2[s]);
             }
         }
 
-        for (const auto r : {OpStruct::One,OpStruct::Two})
+        for (const auto r : r_vals)
         {
-            for (const auto s : {OpStruct::One,OpStruct::Two})
+            for (const auto s : s_vals)
             {
                 for (int t = 0; t < Nt; t++)
                 {
@@ -307,22 +350,26 @@ void TDMixingTopD<FImpl>::execute(void)
                         std::fill(diagSum[t].begin(), diagSum[t].end(), Complex(0.0));
                 }
 
-                for (int i = 0; i < Neta; i++)
+                for (int i = 0; i < std::max(Neta1,Neta2); i++)
                 {
                     int eta_max = i + 1;
+                    int i_l = std::min(i,Neta1-1);
+                    int i_r = std::min(i,Neta2-1);
 
-                    const auto &Li = half_l[half_idx(r,i,Neta)];
-                    const auto &Ri = half_r[half_idx(s,i,Neta)];
+                    const auto &Li = half_l[half_idx(r,i_l,Neta1)];
+                    const auto &Ri = half_r[half_idx(s,i_r,Neta2)];
 
                     // accumulate sums of Li, Ri
                     for (int t = 0; t < Nt; t++)
                     {
-                        Lsum[t] += Li[t];
-                        Rsum[t] += Ri[t];
+                        if (i < Neta1)
+                            Lsum[t] += Li[t];
+                        if (i < Neta2)
+                            Rsum[t] += Ri[t];
                     }
                     tmpSum = contract_D(Lsum, Rsum);
 
-                    if (same_loop_noise)
+                    if (same_loop_noise) // Guarantees Neta1==Neta2 so no edge cases to avoid
                     {
                         // accumulate sum of diagonal terms & remove from total
                         const auto diag = contract_D(Li, Ri);
@@ -335,7 +382,7 @@ void TDMixingTopD<FImpl>::execute(void)
                     }
 
                     const double norm = (!same_loop_noise)
-                                            ? double((i + 1) * (i + 1))
+                                            ? double(std::min(i+1,Neta1) * std::min(i+1,Neta2))
                                             : (i > 0 ? double((i + 1) * i) : 1.0);
 
                     for (int t1 = 0; t1 < Nt; t1++)

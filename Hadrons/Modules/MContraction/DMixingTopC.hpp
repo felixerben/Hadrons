@@ -41,7 +41,7 @@ BEGIN_HADRONS_NAMESPACE
  *                         DMixingTopC                                        *
  *                  (Fig. 4 (C) in arxiv:2504.16189)
  *                 qCL                                qUR
- *               /-->--\    qLoop1                  /-->--\
+ *               /-->--\     qLoop                  /-->--\
  *              /       \    /->-\      /->-\      /       \
  *             /       ┌───┐/     \    /     \┌───┐         \
  *         g5 *        | r |       |   |      | r'|          * g5
@@ -59,9 +59,9 @@ BEGIN_HADRONS_NAMESPACE
  *
  * Contractions: [...] = tr(...) -- only one side is computed
  * r = 1:
- *  [qCL * g5 * qUL * GB1 * qLoop1 * GA1]
+ *  [qCL * g5 * qUL * GB1 * qLoop * GA1]
  * r = 2:
- *  [qCL * g5 * qUL * GB1]*[qLoop1 * GA1]
+ *  [qCL * g5 * qUL * GB1]*[qLoop * GA1]
  *
  ******************************************************************************/
 BEGIN_MODULE_NAMESPACE(MContraction)
@@ -72,7 +72,7 @@ public:
     GRID_SERIALIZABLE_CLASS_MEMBERS(DMixingTopCPar,
                                     std::string, qULeft,
                                     std::string, qCLeft,
-                                    std::string, qLoop1,
+                                    std::string, qLoop,
                                     std::string, output);
 };
 
@@ -134,8 +134,9 @@ template <typename FImpl>
 std::vector<std::string> TDMixingTopC<FImpl>::getInput(void)
 {
     std::vector<std::string> in = {par().qULeft,
-                                   par().qCLeft,
-                                   par().qLoop1};
+                                   par().qCLeft};
+    if (!par().qLoop.empty())
+        in.push_back(par().qLoop);
 
     return in;
 }
@@ -202,33 +203,51 @@ void TDMixingTopC<FImpl>::execute(void)
     LOG(Message) << "Computing D-meson mixing diagram, topology C" << std::endl;
     LOG(Message) << "qULeft  : " << par().qULeft << std::endl;
     LOG(Message) << "qCLeft  : " << par().qCLeft << std::endl;
-    LOG(Message) << "qLoop1  : " << par().qLoop1 << std::endl;
+    bool qLoop_empty = par().qLoop.empty();
+    if (qLoop_empty)
+        LOG(Message) << "Empty qLoop : (Pseudo)Scalar bilinear" << std::endl;
+    else
+        LOG(Message) << "qLoop  : " << par().qLoop << std::endl;
+
 
     std::vector<Result> result;
 
     const int Nt{env().getDim(Tdir)};
     GridCartesian *grid = envGetGrid(FermionField);
+    
+    std::vector<PropagatorField *> ql_default(1,nullptr);
 
     auto &qul = envGet(PropagatorField, par().qULeft);
     auto &qcl = envGet(PropagatorField, par().qCLeft);
-    auto &ql1 = envGet(std::vector<PropagatorField *>, par().qLoop1);
+    auto &ql  = (qLoop_empty) ? ql_default
+                              : envGet(std::vector<PropagatorField *>, par().qLoop);
+    int Neta = ql.size();
+
+    PropagatorField Unit(grid); Unit = 1;
 
     Gamma g5(Gamma::Algebra::Gamma5);
     const PropagatorField qul_adj = g5 * adj(qul) * g5;
 
-    int Neta = ql1.size();
-
     envGetTmp(std::vector<PropagatorField>, GdsG);
+
+    std::vector<OpStruct> r_vals;
+    if (qLoop_empty) r_vals = {OpStruct::Two}; // Bilinear has similar structure to r=2
+    else             r_vals = {OpStruct::One,OpStruct::Two};
 
     for (const auto p : {Parity::Pos,Parity::Neg})
     {
         for (int i = 0; i < Neta; i++)
         {
             startTimer("GH_cap");
-            DMixingUtils<FImpl>::GH_cap(GdsG, *ql1[i], p);
+            if (qLoop_empty) {
+                GdsG[OpStruct::One] = Unit * parityG[p];
+                GdsG[OpStruct::Two] = Unit * parityG[p];
+            } else {
+                DMixingUtils<FImpl>::GH_cap(GdsG, *ql[i], p);
+            }
             stopTimer("GH_cap");
 
-            for (const auto r : {OpStruct::One,OpStruct::Two})
+            for (const auto r : r_vals)
             {
                 Result res;
                 res.info.parity = DMixingUtils<FImpl>::toString(p);
