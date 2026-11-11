@@ -130,7 +130,9 @@ void TLoadPerambulator<FImpl>::execute(void)
     const int  Nt{env().getDim(Tdir)};
 
     std::string sourceT = par().timeSources;
-    std::vector<int> invT;   
+
+    std::vector<int> invT;
+    MDistil::getSourceTimesFromInput(sourceT,nDT,dilNoise,invT);
 
     perambulator.MetaData.timeSources = invT;
     envGetTmp(MDistil::PerambIndexTensor, PerambTmp);

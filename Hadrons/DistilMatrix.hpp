@@ -547,6 +547,16 @@ public:
                  bool                                           only_diag,
                  const uint                                     diag_shift,
                  std::map<Side, MDistil::PerambTensor&>         peramb={});
+    // Exact-distillation two-point contraction. Result layout:
+    // [dt][momentum][gammaSrc][gammaSnk][sink time].
+    void execute2pt(std::vector<ComplexD>& corr,
+                    const std::vector<uint>& dtList,
+                    const std::vector<Gamma::Algebra>& gammaSrc,
+                    const std::vector<Gamma::Algebra>& gammaSnk,
+                    const std::vector<ComplexField>& sinkPhases,
+                    LapPack& epack,
+                    std::map<Side, uint> noiseIndex,
+                    std::map<Side, MDistil::PerambTensor&> peramb);
 };
 
 //####################################
@@ -1314,6 +1324,237 @@ void DmfComputation<FImpl,T,Tio>
         }
     }
 }
+
+
+ // Exact-distillation 2pt:
+ // Tr[M(rho_R,rho_L) M(phi_L,phi_R)].
+ // The phases passed in are for the sink.
+ // The source uses their conjugates.
+ template <typename FImpl, typename T, typename Tio>
+ void DmfComputation<FImpl,T,Tio>::execute2pt(
+     std::vector<ComplexD>& corr,
+     const std::vector<uint>& dtList,
+     const std::vector<Gamma::Algebra>& gammaSrc,
+     const std::vector<Gamma::Algebra>& gammaSnk,
+     const std::vector<ComplexField>& sinkPhases,
+     LapPack& epack,
+     std::map<Side, uint> noiseIndex,
+     std::map<Side, MDistil::PerambTensor&> peramb)
+ {
+     if (!isExact_)
+     {
+         HADRONS_ERROR(Implementation,
+             "execute2pt currently supports exact distillation only");
+     }
+     if (!isPhi(Side::left) || !isPhi(Side::right))
+     {
+         HADRONS_ERROR(Argument,
+             "execute2pt requires a phi-phi DmfComputation");
+     }
+     if (cacheSize_ == 0 || blockSize_ == 0 ||
+         gammaSrc.empty() || gammaSnk.empty() || sinkPhases.empty())
+     {
+         HADRONS_ERROR(Argument,
+             "Invalid cache/block size, gamma list or momentum list");
+     }
+     if (distilNoise_.at(Side::left).dilutionSize(Index::t) != nt_ ||
+         distilNoise_.at(Side::right).dilutionSize(Index::t) != nt_)
+     {
+         HADRONS_ERROR(Implementation,
+             "execute2pt requires full time dilution");
+     }
+
+     const uint nL = dilSizeLS_.at(Side::left);
+     const uint nR = dilSizeLS_.at(Side::right);
+     const size_t nm = sinkPhases.size();
+     const size_t ng0 = gammaSrc.size();
+     const size_t ng1 = gammaSnk.size();
+
+     corr.assign(dtList.size()*nm*ng0*ng1*nt_,
+                 ComplexD(0.0,0.0));
+
+     auto resultIndex = [&](size_t d, size_t m, size_t gs,
+                            size_t gt, size_t t) {
+         return ((((d*nm+m)*ng0+gs)*ng1+gt)*nt_+t);
+     };
+
+     auto srcIndex = [&](size_t m, size_t gs, size_t r, size_t l) {
+         return (((m*ng0+gs)*nR+r)*nL+l);
+     };
+
+     std::vector<ComplexField> srcPhases;
+     srcPhases.reserve(nm);
+     for (const auto& phase : sinkPhases)
+     {
+         srcPhases.emplace_back(g_);
+         srcPhases.back() = conjugate(phase);
+     }
+
+     // MesonField returns globally reduced matrices.
+     // Do not perform another MPI reduction on corr.
+     //
+     // Retain only the required source timeslice.
+     const uint tile = std::min(blockSize_,cacheSize_);
+
+     for (size_t idt=0; idt<dtList.size(); ++idt)
+     {
+         const uint dt = dtList[idt];
+
+         if (dt >= nt_)
+         {
+             HADRONS_ERROR(Range,
+                 "Time-dilution index out of range");
+         }
+
+         const auto tl =
+             distilNoise_.at(Side::left)
+                         .dilutionPartition(Index::t,dt);
+         const auto tr =
+             distilNoise_.at(Side::right)
+                         .dilutionPartition(Index::t,dt);
+
+         if (tl.size()!=1 || tr.size()!=1 || tl[0]!=tr[0])
+         {
+             HADRONS_ERROR(Implementation,
+                 "Exact 2pt expects a common singleton source-time partition");
+         }
+
+         const uint tSrc = tl[0];
+
+         std::vector<ComplexD> source(
+             nm*ng0*nR*nL,ComplexD(0.0,0.0));
+
+         // Construct M(rho_R,rho_L).
+         // Right noise supplies the left matrix index.
+         for (uint r0=0;r0<nR;r0+=tile)
+         for (uint l0=0;l0<nL;l0+=tile)
+         {
+             const uint nr=std::min(tile,nR-r0);
+             const uint nl=std::min(tile,nL-l0);
+
+             DistilVector rhoR, rhoL;
+             rhoR.reserve(nr);
+             rhoL.reserve(nl);
+
+             for (uint r=0;r<nr;++r)
+             {
+                 rhoR.emplace_back(g_);
+                 makeRhoComponent(
+                     rhoR.back(),
+                     distilNoise_.at(Side::right),
+                     noiseIndex.at(Side::right),
+                     distilNoise_.at(Side::right)
+                         .dilutionIndex(dt,0,0)+r0+r);
+             }
+
+             for (uint l=0;l<nl;++l)
+             {
+                 rhoL.emplace_back(g_);
+                 makeRhoComponent(
+                     rhoL.back(),
+                     distilNoise_.at(Side::left),
+                     noiseIndex.at(Side::left),
+                     distilNoise_.at(Side::left)
+                         .dilutionIndex(dt,0,0)+l0+l);
+             }
+
+             Vector<T> buffer(nm*ng0*nt_*nr*nl);
+             DistilMatrixSetCache<T> mat(
+                 buffer.data(),nm,ng0,nt_,nr,nl);
+
+             A2Autils<FImpl>::MesonField(
+                 mat,rhoR.data(),rhoL.data(),
+                 gammaSrc,srcPhases,nd_-1);
+
+             for (size_t m=0;m<nm;++m)
+             for (size_t gs=0;gs<ng0;++gs)
+             for (uint r=0;r<nr;++r)
+             for (uint l=0;l<nl;++l)
+             {
+                 source[srcIndex(m,gs,r0+r,l0+l)] =
+                     mat(m,gs,tSrc,r,l);
+             }
+         }
+
+         // Construct M(phi_L,phi_R) in tiles.
+         // Contract each tile immediately.
+         for (uint l0=0;l0<nL;l0+=tile)
+         for (uint r0=0;r0<nR;r0+=tile)
+         {
+             const uint nl=std::min(tile,nL-l0);
+             const uint nr=std::min(tile,nR-r0);
+
+             DistilVector phiL, phiR;
+             phiL.reserve(nl);
+             phiR.reserve(nr);
+
+             const bool sameInput =
+                 (&distilNoise_.at(Side::left) ==
+                  &distilNoise_.at(Side::right)) &&
+                 (noiseIndex.at(Side::left) ==
+                  noiseIndex.at(Side::right)) &&
+                 (vectorStem_.at(Side::left) ==
+                  vectorStem_.at(Side::right)) &&
+                 ((!vectorStem_.at(Side::left).empty()) ||
+                  (peramb.count(Side::left) &&
+                   peramb.count(Side::right) &&
+                   (&peramb.at(Side::left) ==
+                    &peramb.at(Side::right))));
+
+             for (uint l=0;l<nl;++l)
+             {
+                 phiL.emplace_back(g_);
+
+                 makeDvLapSpinComponent(
+                     phiL.back(),noiseIndex,epack,Side::left,
+                     distilNoise_.at(Side::left)
+                         .dilutionIndex(dt,0,0)+l0+l,
+                     peramb);
+             }
+
+             // Reuse overlapping components for identical inputs.
+             for (uint r=0;r<nr;++r)
+             {
+                 phiR.emplace_back(g_);
+                 const uint idx=r0+r;
+
+                 if (sameInput && idx>=l0 && idx<l0+nl)
+                 {
+                     phiR.back()=phiL[idx-l0];
+                 }
+                 else
+                 {
+                     makeDvLapSpinComponent(
+                         phiR.back(),noiseIndex,epack,Side::right,
+                         distilNoise_.at(Side::right)
+                             .dilutionIndex(dt,0,0)+idx,
+                         peramb);
+                 }
+             }
+
+             Vector<T> buffer(nm*ng1*nt_*nl*nr);
+             DistilMatrixSetCache<T> mat(
+                 buffer.data(),nm,ng1,nt_,nl,nr);
+
+             A2Autils<FImpl>::MesonField(
+                 mat,phiL.data(),phiR.data(),
+                 gammaSnk,sinkPhases,nd_-1);
+
+             for (size_t m=0;m<nm;++m)
+             for (size_t gs=0;gs<ng0;++gs)
+             for (size_t gt=0;gt<ng1;++gt)
+             for (uint t=0;t<nt_;++t)
+             for (uint l=0;l<nl;++l)
+             for (uint r=0;r<nr;++r)
+             {
+                 corr[resultIndex(idt,m,gs,gt,t)] +=
+                     source[srcIndex(m,gs,r0+r,l0+l)] *
+                     mat(m,gt,t,l,r);
+             }
+         }
+     }
+ }
+
 
 END_HADRONS_NAMESPACE
 

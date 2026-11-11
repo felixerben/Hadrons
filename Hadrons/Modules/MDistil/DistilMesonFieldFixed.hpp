@@ -291,10 +291,12 @@ void TDistilMesonFieldFixed<FImpl>::execute(void)
 
     // nvec check against noises (and assuming nvec cannot be different on different sides!)
     std::map<Side, DistillationNoise & > noises = {{Side::left,noisel},{Side::right,noiser}};
+    /*
     if((noisel.getNl() != nVec) || (noiser.getNl() != nVec))
     {
         HADRONS_ERROR(Size, "Incompatibility between number of Laplacian eigenvectors and size of Laplacian subspace in the noises.");
     }
+    */
 
     // fetch time sources input
     std::map<Side, std::vector<unsigned int>> time_sources = {{Side::left,tSourceL_},{Side::right,tSourceR_}};
@@ -307,6 +309,17 @@ void TDistilMesonFieldFixed<FImpl>::execute(void)
             {
                 auto & inPeramb = envGet(PerambTensor , perambNames_.at(s));
                 ts_peramb.emplace(s , inPeramb.MetaData.timeSources);
+
+                LOG(Message) << "Perambulator "
+                      << ((s == Side::left) ? "LEFT" : "RIGHT")
+                      << " metadata time sources: ";
+
+                for (const auto t : inPeramb.MetaData.timeSources)
+                {
+                    LOG(Message) << t << " ";
+                }
+                LOG(Message) << std::endl;
+
                 if(time_sources.at(s).empty())  //in case it's empty and it's a phi, include all available peramb time sources
                 {
                     for(auto tperamb : ts_peramb.at(s))

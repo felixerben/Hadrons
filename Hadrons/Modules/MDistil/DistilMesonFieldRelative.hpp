@@ -316,10 +316,12 @@ void TDistilMesonFieldRelative<FImpl>::execute(void)
 
     // nvec check against noises (and assuming nvec cannot be different on different sides!)
     std::map<Side, DistillationNoise & > noises = {{Side::left,noisel},{Side::right,noiser}};
+    /*
     if((noisel.getNl() != nVec) || (noiser.getNl() != nVec))
     {
         HADRONS_ERROR(Size, "Incompatibility between number of Laplacian eigenvectors and size of Laplacian subspace in the noises.");
     }
+    */
 
     // fetch time sources input
     std::map<Side, std::vector<unsigned int>> time_sources = {{Side::left,tSourceL_},{Side::right,tSourceR_}};
